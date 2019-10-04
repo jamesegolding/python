@@ -19,6 +19,25 @@ def update(x: np.ndarray,
            t: np.ndarray,
            k: np.ndarray,
            ):
+    """
+
+    :param x: state vector
+    :param t: target (x, y, z, az)
+    :param k: optimal gain matrix (LQR)
+    :return: input vector
+    """
+
+    xyz_world = x[:2]
+    xyz_world_target = t[:2]
+    az_world_target = t[3]
+
+
+
+    x_target = np.concatenate((
+        t[0:3],
+        t[
+        t[0]
+    ])
 
     u = -k @ x
 

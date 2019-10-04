@@ -5,8 +5,9 @@ rho = 1.225             # [kg/m/m/m]
 
 # mass and inertia
 m = 1.2                 # [kg]
-J_xy = 0.01             # [kg*m*m]
-J_z = 0.02              # [kg*m*m]
+J_xx = 0.01             # [kg*m*m]
+J_yy = 0.01             # [kg*m*m]
+J_zz = 0.02             # [kg*m*m]
 
 # geometry
 l_xy_arm = 0.2          # [m] half width/length of drone (cg to motor)
