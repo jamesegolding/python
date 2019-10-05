@@ -8,6 +8,13 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 
+motr_mat = np.array([
+    [0.,       l_arm,   -l_arm,    0.],
+    [l_arm,    0.,       0.,      -l_arm],
+    [k_z_arm, -k_z_arm, -k_z_arm,  k_z_arm]
+])
+
+
 def vertical_state_space():
 
     a = np.array([
@@ -28,8 +35,13 @@ def vertical_state_space():
     return a, b, q, r, u_0
 
 
+def torque_motor_inv():
+
+    return np.linalg.inv(np.vstack((np.ones((1, 4)), motr_mat)))
+
+
 @numba.jit(nopython=True)
-def calc_derivative(s: np.ndarray, u: np.ndarray):
+def calc_derivative(s: np.ndarray, u: np.ndarray, r_disturb: float = 0.):
 
     x = s[:3]    # translational position (world to body)
     q = s[3:7]   # quaternion (world to body)
@@ -58,9 +70,7 @@ def calc_derivative(s: np.ndarray, u: np.ndarray):
     g = (1. / m) * (f_grav_wrld + f_grnd_wrld + r @ (f_drag_body + f_motr_body))
 
     # calculate contributions to torque
-    t_motr = np.array([[0.,         l_xy_arm, -l_xy_arm,  0.],
-                       [l_xy_arm,   0.,         0.,      -l_xy_arm],
-                       [k_z_arm,   -k_z_arm,  -k_z_arm,   k_z_arm]]) @ u
+    t_motr = motr_mat @ u
     t_inert = np.array([(J_yy - J_zz) * n_body[1] * n_body[2],
                         (J_zz - J_xx) * n_body[2] * n_body[0],
                         (J_xx - J_yy) * n_body[0] * n_body[1]])
@@ -71,7 +81,7 @@ def calc_derivative(s: np.ndarray, u: np.ndarray):
     # convert angular acceleration to quaternion acceleration
     do = quaternion.from_angular_acceleration(w_body, dn_body)
 
-    ds = np.concatenate((v, o, g, do))
+    ds = np.concatenate((v, o, g, do)) + calc_disturbance(r_disturb)
 
     return ds
 
@@ -88,11 +98,21 @@ def custom_clip(a, a_min, a_max):
     return a
 
 
-def step(s_prev: np.ndarray, u: np.ndarray, dt: float):
+@numba.jit(nopython=True)
+def calc_disturbance(r_disturb: float) -> np.ndarray:
 
-    assert dt <= 0.01, f"dt must be less than 0.01, is {dt}"
+    d = np.concatenate((
+        np.zeros(7),
+        r_disturb * np.random.normal(0., std_dist, 7),
+    ))
 
-    ds = calc_derivative(s_prev, u)
+    return d
+
+
+@numba.jit(nopython=True)
+def step(s_prev: np.ndarray, u: np.ndarray, dt: float, r_disturb: float = 0.):
+
+    ds = calc_derivative(s_prev, u, r_disturb)
 
     # euler integration
     s = s_prev + ds * dt

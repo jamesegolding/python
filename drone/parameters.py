@@ -5,12 +5,12 @@ rho = 1.225             # [kg/m/m/m]
 
 # mass and inertia
 m = 1.2                 # [kg]
-J_xx = 0.01             # [kg*m*m]
-J_yy = 0.01             # [kg*m*m]
-J_zz = 0.02             # [kg*m*m]
+J_xx = 7.0e-3           # [kg*m*m]
+J_yy = 7.0e-3           # [kg*m*m]
+J_zz = 1.3e-2           # [kg*m*m]
 
 # geometry
-l_xy_arm = 0.2          # [m] half width/length of drone (cg to motor)
+l_arm = 0.2             # [m] arm length of drone (cg to motor)
 k_z_arm = 0.2           # [m] influence of single motor on yaw
 
 # aerodynamics
@@ -20,10 +20,7 @@ cd_axy = 0.02           # [-] Mx / 0.5 / rho / n_x^2 (copy My vs n_y)
 cd_az = 0.04            # [-] Mz / 0.5 / rho / n_z^2
 
 # disturbances
-std_g_xy_dist = 0.002    # [m/s/s] body frame
-std_g_z_dist = 0.002     # [m/s/s] body frame
-std_dn_axy_dist = 0.002  # [rad/s/s] body frame
-std_dn_az_dist = 0.002   # [rad/s/s] body frame
+std_dist = 1.0          # [m/s/s]
 
 # sensor noise
 std_g_xyz_noise = 0.1   # [m/s/s]
