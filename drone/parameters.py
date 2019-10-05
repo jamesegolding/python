@@ -31,7 +31,7 @@ std_dn_axyz_noise = 0.1 # [rad/s/s]
 std_a_mag_noise = 0.03  # [-] orientation vector
 
 # motor_max
-F_motor_max = 6.5727
+f_motor_max = 6.5727
 
 # grounding
 k_ground = 1e2

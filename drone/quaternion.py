@@ -85,99 +85,51 @@ def rate_matrix_world(q: np.ndarray):
 
 
 @numba.jit(nopython=True)
-def to_angular_velocity_body(w_body: np.ndarray, q_dot: np.ndarray):
+def to_angular_velocity(w: np.ndarray, q_dot: np.ndarray):
     """
-    Calculate angular velocity (body) from quaternion rate
-    :param w_body: quaternion rate matrix (body)
+    Calculate angular velocity (body or world) from quaternion rate
+    :param w: quaternion rate matrix (body or world)
     :param q_dot: quaternion rate
-    :return: angular velocity in body frame
+    :return: angular velocity in body or world frame
     """
 
-    return 2 * w_body @ q_dot
+    return 2 * w @ q_dot
 
 
 @numba.jit(nopython=True)
-def to_angular_velocity_world(w_world: np.ndarray, q_dot: np.ndarray):
+def from_angular_velocity(w: np.ndarray, n: np.ndarray):
     """
-    Calculate angular velocity (world) from quaternion rate
-    :param w_world: quaternion rate matrix (world)
-    :param q_dot: quaternion rate
-    :return: angular velocity in world frame
-    """
-
-    return 2 * w_world @ q_dot
-
-
-@numba.jit(nopython=True)
-def from_angular_velocity_body(w_body: np.ndarray, n_body: np.ndarray):
-    """
-    Calculate quaternion rate from angular velocity (body)
-    :param w_body: quaternion rate matrix (body)
-    :param n_body: angular velocity in body frame
+    Calculate quaternion rate from angular velocity (body or world)
+    :param w: quaternion rate matrix (body or world)
+    :param n: angular velocity in body or world frame
     :return: quaternion rate
     """
 
-    return 0.5 * w_body.T @ n_body
+    return 0.5 * w.T @ n
 
 
 @numba.jit(nopython=True)
-def from_angular_velocity_world(w_world: np.ndarray, n_world: np.ndarray):
+def to_angular_acceleration(w: np.ndarray, q_dot_dot: np.ndarray):
     """
-    Calculate quaternion rate from angular velocity (world)
-    :param w_world: quaternion rate matrix (world)
-    :param n_world: angular velocity in world frame
-    :return: quaternion rate
-    """
-
-    return 0.5 * w_world.T @ n_world
-
-
-@numba.jit(nopython=True)
-def to_angular_acceleration_body(w_body: np.ndarray, q_dot_dot: np.ndarray):
-    """
-    Calculate angular acceleration (body) from quaternion rate
-    :param w_body: quaternion rate matrix (body)
+    Calculate angular acceleration (body or world) from quaternion rate
+    :param w: quaternion rate matrix (body or world)
     :param q_dot_dot: quaternion rate of rate
-    :return: angular acceleration in body frame
+    :return: angular acceleration in body or world frame
     """
 
-    return 2 * w_body @ q_dot_dot
+    return 2 * w @ q_dot_dot
 
 
 @numba.jit(nopython=True)
-def to_angular_acceleration_world(w_world: np.ndarray, q_dot_dot: np.ndarray):
+def from_angular_acceleration(w: np.ndarray, dn: np.ndarray):
     """
-    Calculate angular acceleration (world) from quaternion rate
-    :param w_world: quaternion rate matrix (world)
-    :param q_dot_dot: quaternion rate of rate
-    :return: angular acceleration in world frame
-    """
-
-    return 2 * w_world @ q_dot_dot
-
-
-@numba.jit(nopython=True)
-def from_angular_acceleration_body(w_body: np.ndarray, dn_body: np.ndarray):
-    """
-    Calculate quaternion rate of rate from angular velocity (body)
-    :param w_body: quaternion rate matrix (body)
-    :param dn_body: angular acceleration in body frame
+    Calculate quaternion rate of rate from angular velocity (body or world)
+    :param w: quaternion rate matrix (body or world)
+    :param dn: angular acceleration in body or world frame
     :return: quaternion rate of rate
     """
 
-    return 0.5 * w_body.T @ dn_body
-
-
-@numba.jit(nopython=True)
-def from_angular_acceleration_world(w_world: np.ndarray, dn_world: np.ndarray):
-    """
-    Calculate quaternion rate of rate from angular velocity (world)
-    :param w_world: quaternion rate matrix (world) transposed
-    :param dn_world: angular acceleration in world frame
-    :return: quaternion rate of rate
-    """
-
-    return 0.5 * w_world.T @ dn_world
+    return 0.5 * w.T @ dn
 
 
 @numba.jit(nopython=True)
@@ -256,10 +208,88 @@ def rot_mat_to_euler(r: np.ndarray):
     :return: euler ZYX angles
     """
 
-    phi = np.arctan(r[2, 1] / r[2, 2])
-    theta = -np.arctan2(r[2, 0], np.sqrt(1 - r[2, 0] ** 2))
-    psi = np.arctan(r[1, 0] / r[0, 0])
+    phi = np.arctan2(r[2, 1], r[2, 2])
+    theta = np.arctan2(-r[2, 0], np.sqrt(r[2, 1] ** 2 + r[2, 2] ** 2))
+    psi = np.arctan2(r[1, 0], r[0, 0])
 
-    e = np.array([phi, theta, psi])
+    return np.array([phi, theta, psi])
 
-    return e
+
+@numba.jit(nopython=True)
+def euler_to_rot_mat(e: np.ndarray):
+    """
+    Calculate rotation matrix from euler angles
+    :param e: euler ZYX angles
+    :return: rotation matrix
+    """
+
+    c0 = np.cos(e[0])
+    c1 = np.cos(e[1])
+    c2 = np.cos(e[2])
+    s0 = np.sin(e[0])
+    s1 = np.sin(e[1])
+    s2 = np.sin(e[2])
+
+    return np.array([
+        [c2 * c1,  c2 * s1 * s0 - s2 * c0,  c2 * s1 * c0 + s2 * s0],
+        [s2 * c1,  s2 * s1 * s0 + c2 * c0,  s2 * s1 * c0 - c2 * s0],
+        [-s1,      c1 * s0,                 c1 * c0],
+    ])
+
+
+@numba.jit(nopython=True)
+def euler_fix_quadrant(e: np.ndarray):
+    """
+    Convert angle into -pi to +pi quadrant
+    :param e: euler ZYX angles
+    :return: euler ZYX angles within range -pi to pi
+    """
+
+    e_fix = e % (2 * np.pi)
+    gt_pi = 0.5 * (1 + np.sign(e_fix - np.pi))
+    e_fix = e_fix - 2 * np.pi * gt_pi
+
+    return e_fix
+
+
+def test():
+
+    for i in range(100):
+
+        e_0 = euler_fix_quadrant(2 * np.pi * np.random.rand(3))
+        n_0 = np.random.rand(3)
+        dn_0 = np.random.rand(3)
+
+        r_1 = euler_to_rot_mat(e_0)
+        e_1 = rot_mat_to_euler(r_1)
+
+        assert np.isclose(e_0, e_1).all(), f"({i}) Euler angles to not match\n{e_0}\n{e_1}"
+
+        q_1 = from_rot_mat(r_1)
+        r_2 = to_rot_mat(q_1)
+
+        assert np.isclose(r_1, r_2).all(), f"({i}) Rotation matrices to not match\n{r_1}\n{r_2}"
+
+        w_b_1 = rate_matrix_body(q_1)
+        o_b_1 = from_angular_velocity(w_b_1, n_0)
+        n_1 = to_angular_velocity(w_b_1, o_b_1)
+
+        assert np.isclose(n_0, n_1).all(), f"({i}) Angular velocities (body conversion) to not match\n{n_0}\n{n_1}"
+
+        w_w_1 = rate_matrix_world(q_1)
+        o_w_1 = from_angular_velocity(w_w_1, n_0)
+        n_2 = to_angular_velocity(w_w_1, o_w_1)
+
+        assert np.isclose(n_0, n_2).all(), f"({i}) Angular velocities (world conversion) to not match\n{n_0}\n{n_2}"
+
+        l_b_1 = from_angular_acceleration(w_b_1, dn_0)
+        dn_1 = to_angular_acceleration(w_b_1, l_b_1)
+
+        assert np.isclose(dn_0, dn_1).all(), f"({i}) Angular accelerations (body conversion) to not match\n{dn_0}\n{dn_1}"
+
+        l_w_1 = from_angular_acceleration(w_w_1, dn_0)
+        dn_2 = to_angular_acceleration(w_w_1, l_w_1)
+
+        assert np.isclose(dn_0, dn_2).all(), f"({i}) Angular accelerations (world conversion) to not match\n{dn_0}\n{dn_2}"
+
+

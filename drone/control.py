@@ -1,4 +1,4 @@
-import scipy
+import scipy.linalg
 import numpy as np
 
 
@@ -8,37 +8,21 @@ def calc_lqr_gain(A, B, Q, R):
     s = scipy.linalg.solve_continuous_are(A, B, Q, R)
 
     # compute the LQR gain
-    k = np.dot(np.linalg.inv(R), (np.dot(B.T, x)))
+    k = np.dot(np.linalg.inv(R), (np.dot(B.T, s)))
 
     eigs = np.linalg.eigvals(A - np.dot(B, k))
 
-    return k, s, eigs
+    return k
 
 
-def update(x: np.ndarray,
-           t: np.ndarray,
+def update(s: np.ndarray,
+           tgt: np.ndarray,
            k: np.ndarray,
+           u_0: np.ndarray,
            ):
-    """
 
-    :param x: state vector
-    :param t: target (x, y, z, az)
-    :param k: optimal gain matrix (LQR)
-    :return: input vector
-    """
+    x = np.array([s[2], s[9]]) - np.array([tgt[0], 0])
 
-    xyz_world = x[:2]
-    xyz_world_target = t[:2]
-    az_world_target = t[3]
+    u = u_0 - k @ x
 
-
-
-    x_target = np.concatenate((
-        t[0:3],
-        t[
-        t[0]
-    ])
-
-    u = -k @ x
-
-    return t - u
+    return u
