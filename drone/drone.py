@@ -2,13 +2,14 @@ import numpy as np
 from parameters import *
 import quaternion
 import numba
+import utilities as utils
 
 import logging
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger = logging.getLogger("drone")
+logger.setLevel(logging.INFO)
 
 
-motr_mat = np.array([
+motor_mat = np.array([
     [0.,       l_arm,   -l_arm,    0.],
     [l_arm,    0.,       0.,      -l_arm],
     [k_z_arm, -k_z_arm, -k_z_arm,  k_z_arm]
@@ -37,10 +38,9 @@ def vertical_state_space():
 
 def torque_motor_inv():
 
-    return np.linalg.inv(np.vstack((np.ones((1, 4)), motr_mat)))
+    return np.linalg.inv(np.vstack((np.ones((1, 4)), motor_mat)))
 
 
-@numba.jit(nopython=True)
 def calc_derivative(s: np.ndarray, u: np.ndarray, r_disturb: float = 0.):
 
     x = s[:3]    # translational position (world to body)
@@ -49,7 +49,7 @@ def calc_derivative(s: np.ndarray, u: np.ndarray, r_disturb: float = 0.):
     o = s[10:]   # quaternion rate (world to body)
 
     # motor performance limits
-    u = custom_clip(u, 0., f_motor_max)
+    u = utils.clip(u, a_min=0., a_max=f_motor_max)
 
     # calculate rotation matrix
     r = quaternion.to_rot_mat(q)
@@ -57,26 +57,26 @@ def calc_derivative(s: np.ndarray, u: np.ndarray, r_disturb: float = 0.):
     n_body = quaternion.to_angular_velocity(w_body, o)
 
     # calculate contributions to translational force
-    f_grav_wrld = m * np.array([0., 0., -G])
+    f_gravity_world = m * np.array([0., 0., -G])
     f_drag_body = -0.5 * rho * np.multiply(np.array([cd_xy, cd_xy, cd_z]), v)
-    f_motr_body = np.array([0, 0, u.sum()])
+    f_motor_body = np.array([0, 0, u.sum()])
 
     if x[2] < 0:
-        f_grnd_wrld = np.array([0., 0., -k_ground * x[2] - d_ground * v[2]])
+        f_ground_world = np.array([0., 0., -k_ground * x[2] - d_ground * v[2]])
     else:
-        f_grnd_wrld = np.array([0., 0., 0.])
+        f_ground_world = np.array([0., 0., 0.])
 
     # calculate translational acceleration
-    g = (1. / m) * (f_grav_wrld + f_grnd_wrld + r @ (f_drag_body + f_motr_body))
+    g = (1. / m) * (f_gravity_world + f_ground_world + r @ (f_drag_body + f_motor_body))
 
     # calculate contributions to torque
-    t_motr = motr_mat @ u
+    t_motor = motor_mat @ u
     t_inert = np.array([(J_yy - J_zz) * n_body[1] * n_body[2],
                         (J_zz - J_xx) * n_body[2] * n_body[0],
                         (J_xx - J_yy) * n_body[0] * n_body[1]])
 
     # calculate angular acceleration (body)
-    dn_body = np.multiply(np.array([1. / J_xx, 1. / J_yy, 1. / J_zz]), t_motr + t_inert)
+    dn_body = np.multiply(np.array([1. / J_xx, 1. / J_yy, 1. / J_zz]), t_motor + t_inert)
 
     # convert angular acceleration to quaternion acceleration
     do = quaternion.from_angular_acceleration(w_body, dn_body)
@@ -86,30 +86,16 @@ def calc_derivative(s: np.ndarray, u: np.ndarray, r_disturb: float = 0.):
     return ds
 
 
-@numba.jit(nopython=True)
-def custom_clip(a, a_min, a_max):
-
-    for i in range(len(a)):
-        if a[i] > a_max:
-            a[i] = a_max
-        elif a[i] < a_min:
-            a[i] = a_min
-
-    return a
-
-
-@numba.jit(nopython=True)
 def calc_disturbance(r_disturb: float) -> np.ndarray:
 
     d = np.concatenate((
-        np.zeros(7),
-        r_disturb * np.random.normal(0., std_dist, 7),
+        r_disturb * np.random.normal(0., std_v_dist, 7),
+        r_disturb * np.random.normal(0., std_g_dist, 7),
     ))
 
     return d
 
 
-@numba.jit(nopython=True)
 def step(s_prev: np.ndarray, u: np.ndarray, dt: float, r_disturb: float = 0.):
 
     ds = calc_derivative(s_prev, u, r_disturb)
@@ -119,6 +105,6 @@ def step(s_prev: np.ndarray, u: np.ndarray, dt: float, r_disturb: float = 0.):
     s[0:7] = s[0:7] + 0.5 * ds[7:] * dt ** 2
 
     # for safety, re-normalize q
-    s[3:7] = quaternion.normalize(s[3:7])
+    s[3:7] = utils.normalize(s[3:7])
 
     return s

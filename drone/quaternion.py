@@ -1,29 +1,11 @@
 import numpy as np
 import numba
+import utilities as utils
 
 """
 Quaternion Definitions and Transformations based on:
 https://www.astro.rug.nl/software/kapteyn/_downloads/attitude.pdf
 """
-
-EPS = np.finfo(float).eps
-
-
-@numba.jit(nopython=True)
-def normalize(q: np.ndarray):
-    """
-    Calculate normalized quaternion
-    :param q: quaternion
-    :return: normalized quaternion
-    """
-
-    q_norm = np.sqrt(np.sum(np.multiply(q, q)))
-
-    if q_norm < EPS:
-        return q
-
-    return q / q_norm
-
 
 @numba.jit(nopython=True)
 def conjugate(q: np.ndarray):
@@ -33,7 +15,7 @@ def conjugate(q: np.ndarray):
     :return: quaternion conjugate
     """
 
-    return np.multiply(q, np.array([1, -1, -1, -1]))
+    return utils.normalize(np.multiply(q, np.array([1, -1, -1, -1])))
 
 
 @numba.jit(nopython=True)
