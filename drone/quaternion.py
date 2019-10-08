@@ -7,6 +7,7 @@ Quaternion Definitions and Transformations based on:
 https://www.astro.rug.nl/software/kapteyn/_downloads/attitude.pdf
 """
 
+
 @numba.jit(nopython=True)
 def conjugate(q: np.ndarray):
     """
@@ -49,6 +50,20 @@ def rate_matrix_body(q: np.ndarray):
         [-q[2], -q[3],  q[0],  q[1]],
         [-q[3],  q[2], -q[1],  q[0]],
     ])
+
+
+@numba.jit(nopython=True)
+def transform(v: np.ndarray, q: np.ndarray):
+    """
+    Calculate quaternion conjugate
+    :param v: vector
+    :param q: quaternion
+    :return: vector transformed by quaternion
+    """
+
+    v_pad = np.concatenate((np.array([0.]), v))
+
+    return product(q, product(v_pad, conjugate(q)))[1:]
 
 
 @numba.jit(nopython=True)
@@ -125,6 +140,16 @@ def to_euler(q: np.ndarray):
     r = to_rot_mat(q)
 
     return rot_mat_to_euler(r)
+
+
+@numba.jit(nopython=True)
+def to_yaw(q: np.ndarray):
+
+    r10 = 2*(q[2]*q[1] - q[0]*q[3])
+    r00 = q[0]**2 + q[1]**2 - q[2]**2 - q[3]**2
+    psi = np.arctan2(r10, r00)
+
+    return psi
 
 
 @numba.jit(nopython=True)

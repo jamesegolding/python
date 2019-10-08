@@ -11,11 +11,11 @@ logger.setLevel(logging.INFO)
 
 
 # attitude control parameters
-K_P = 0.5
-K_V = 1.0
-K_Q = 2.
-K_W = 0.5
-THETA_MAX = np.pi / 8
+K_P = 0.2
+K_V = 0.5
+K_Q = 2.0
+K_W = 0.9
+THETA_MAX = np.pi / 4.
 
 
 def lqr_gain(A, B, Q, R):
@@ -36,7 +36,7 @@ def update(s: np.ndarray,
            u_0: np.ndarray,
            ):
 
-    u_attitude = attitude(s, tgt[np.array([0, 1, 3])], motor_inv)
+    u_attitude = attitude(s, tgt[np.array([0, 1])], motor_inv)
     u_vertical = vertical(s, tgt[2], k_z)
 
     if max(u_attitude) - min(u_attitude) > f_motor_max:
@@ -73,28 +73,24 @@ def attitude(s: np.ndarray,
              motor_inv: np.ndarray,
              ):
 
-    # position and yaw targets
-    e_p = tgt_xy_psi[np.array([0, 1])] - s[np.array([0, 1])]
-    e_v = np.array([0, 0]) - s[np.array([7, 8])]
-    r_psi = tgt_xy_psi[2]
-
-    # get individual contributions
-    q_xy = planar_ctrl_law(e_p, e_v)
-    q_yaw = yaw_ctrl_law(r_psi)
-
-    # overall target quaternion
-    q_r = quaternion.product(q_xy, q_yaw)
-
+    # get states
     q = s[3:7]   # quaternion (world to body)
     o = s[10:]   # quaternion rate (world to body)
 
-    e_q = quaternion.product(q_r, quaternion.conjugate(q))[1:]
-
+    # rotational velocities
     w_body = quaternion.rate_matrix_body(q)
     e_w = quaternion.to_angular_velocity(w_body, o)
 
-    m_target = K_Q * e_q - K_W * e_w
-    u = motor_inv @ np.concatenate((np.array([0.]), m_target))
+    # position targets
+    e_p = tgt_xy_psi[np.array([0, 1])] - s[np.array([0, 1])]
+    e_v = np.array([0, 0]) - s[np.array([7, 8])]
+    q_r = planar_ctrl_law(e_p, e_v)
+
+    # overall target quaternion
+    e_q = quaternion.product(q_r, quaternion.conjugate(q))[1:]
+
+    m_xy = K_Q * e_q - K_W * e_w
+    u = motor_inv @ np.concatenate((np.array([0.]), m_xy))
 
     return u
 
@@ -106,7 +102,7 @@ def planar_ctrl_law(e_p, e_v):
 
     if norm_e_p > utils.EPS:
         # calculate axis to rotate about
-        axis_p = utils.cross(e_p / norm_e_p, np.array([0, 0, 1]))
+        axis_p = utils.cross(e_p / norm_e_p, np.array([0., 0., 1.]))
         # calculate angle target
         theta_p = utils.clip(K_P * norm_e_p, a_min=-THETA_MAX, a_max=THETA_MAX)
         q_xy = np.concatenate((np.array([np.cos(theta_p / 2.)]),
@@ -115,7 +111,7 @@ def planar_ctrl_law(e_p, e_v):
         # damping terms
         if norm_e_v > utils.EPS:
             # calculate axis to rotate about
-            axis_v = utils.cross(e_v / norm_e_v, np.array([0, 0, 1]))
+            axis_v = utils.cross(e_v / norm_e_v, np.array([0., 0., 1.]))
             # calculate angle target
             theta_v = utils.clip(K_V * norm_e_v, a_min=-THETA_MAX, a_max=THETA_MAX)
             q_v = np.concatenate((np.array([np.cos(theta_v / 2.)]),
@@ -125,16 +121,5 @@ def planar_ctrl_law(e_p, e_v):
         q_xy = np.array([1., 0., 0., 0.])
 
     return q_xy
-
-
-def yaw_ctrl_law(psi_r):
-
-    # yaw target
-    q_yaw = np.concatenate((
-        np.array([np.cos(psi_r / 2.)]),
-        np.sin(psi_r / 2.) * np.array([0, 0, 1]),
-    ))
-
-    return q_yaw
 
 

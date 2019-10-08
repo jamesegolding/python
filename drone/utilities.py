@@ -48,3 +48,20 @@ def normalize(a: np.ndarray):
         return a
 
     return a / a_norm
+
+
+@numba.jit(nopython=True)
+def scale(a: np.ndarray, a_min: float, a_max: float):
+
+    return a_min + (a - min(a)) * (a_max - a_min) / (max(a) - min(a))
+
+
+@numba.jit(nopython=True)
+def quadrant(a: float):
+
+    a = a % (2 * np.pi)
+    if a > np.pi:
+        a = a - 2 * np.pi
+
+    return a
+

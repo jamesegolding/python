@@ -15,9 +15,9 @@ k_z_arm = 0.2           # [m] influence of single motor on yaw
 
 # aerodynamics
 cd_xy = 0.6             # [-] Fx / 0.5 / rho / v_x^2 (copy Fy vs v_y)
-cd_z = 1.2              # [-] Fz / 0.5 / rho / v_z^2
-cd_axy = 1.0            # [-] Mx / 0.5 / rho / n_x^2 (copy My vs n_y)
-cd_az = 1.2             # [-] Mz / 0.5 / rho / n_z^2
+cd_z = 0.6              # [-] Fz / 0.5 / rho / v_z^2
+cd_axy = 0.1            # [-] Mx / 0.5 / rho / n_x^2 (copy My vs n_y)
+cd_az = 0.1             # [-] Mz / 0.5 / rho / n_z^2
 
 # disturbances
 std_g_dist = 1.0        # [m/s/s]

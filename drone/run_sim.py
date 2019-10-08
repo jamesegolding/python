@@ -3,6 +3,7 @@ import drone
 import plotly
 import quaternion
 import control
+import utilities as utils
 
 import logging
 logger = logging.getLogger("run_sim")
@@ -11,9 +12,7 @@ logger.setLevel(logging.INFO)
 
 def run_sim(target: np.ndarray,
             dt: float,
-            z0: float,
-            v_x0: float = 0.,
-            v_y0: float = 0.,
+            s0: np.ndarray,
             r_disturb: float = 0.,
             ):
 
@@ -26,11 +25,7 @@ def run_sim(target: np.ndarray,
     u[:] = np.nan
 
     # define initial conditions
-    s[0, :] = np.zeros(14)
-    s[0, 2] = z0
-    s[0, 3] = 1.
-    s[0, 7] = v_x0
-    s[0, 8] = v_y0
+    s[0, :] = s0
 
     motor_inv = drone.torque_motor_inv()
     a, b, q, r, u_0 = drone.vertical_state_space()
@@ -60,46 +55,65 @@ def plot_result(t, s, e, u, title):
     ]
 
     data_3 = [
-        plotly.graph_objs.Scatter(x=t, y=s[:, 3].squeeze(), name="Q_r"),
-        plotly.graph_objs.Scatter(x=t, y=s[:, 4].squeeze(), name="Q_i"),
-        plotly.graph_objs.Scatter(x=t, y=s[:, 5].squeeze(), name="Q_j"),
-        plotly.graph_objs.Scatter(x=t, y=s[:, 6].squeeze(), name="Q_k"),
+        plotly.graph_objs.Scatter(x=t, y=s[:, 3].squeeze(), name="Q0"),
+        plotly.graph_objs.Scatter(x=t, y=s[:, 4].squeeze(), name="Qi"),
+        plotly.graph_objs.Scatter(x=t, y=s[:, 5].squeeze(), name="Qj"),
+        plotly.graph_objs.Scatter(x=t, y=s[:, 6].squeeze(), name="Qk"),
     ]
 
     data_4 = [
-        plotly.graph_objs.Scatter(x=t, y=s[:, 7].squeeze(), name="v_x"),
-        plotly.graph_objs.Scatter(x=t, y=s[:, 8].squeeze(), name="v_y"),
-        plotly.graph_objs.Scatter(x=t, y=s[:, 9].squeeze(), name="v_z"),
+        plotly.graph_objs.Scatter(x=t, y=s[:, 7].squeeze(), name="vx"),
+        plotly.graph_objs.Scatter(x=t, y=s[:, 8].squeeze(), name="vy"),
+        plotly.graph_objs.Scatter(x=t, y=s[:, 9].squeeze(), name="vz"),
     ]
 
     data_5 = [
-        plotly.graph_objs.Scatter(x=t, y=u[:, 0].squeeze(), name="F_Front"),
-        plotly.graph_objs.Scatter(x=t, y=u[:, 1].squeeze(), name="F_Left"),
-        plotly.graph_objs.Scatter(x=t, y=u[:, 2].squeeze(), name="F_Right"),
-        plotly.graph_objs.Scatter(x=t, y=u[:, 3].squeeze(), name="F_Rear"),
+        plotly.graph_objs.Scatter(x=t, y=u[:, 0].squeeze(), name="Front"),
+        plotly.graph_objs.Scatter(x=t, y=u[:, 1].squeeze(), name="Left"),
+        plotly.graph_objs.Scatter(x=t, y=u[:, 2].squeeze(), name="Right"),
+        plotly.graph_objs.Scatter(x=t, y=u[:, 3].squeeze(), name="Rear"),
+    ]
+
+    data_6 = [
+        plotly.graph_objs.Scatter(x=s[:, 0].squeeze(),
+                                  y=s[:, 1].squeeze(),
+                                  mode='markers',
+                                  name="Trajectory",
+                                  marker=dict(size=5.,
+                                              colorscale='Viridis',
+                                              color=utils.scale(s[:, 2].squeeze(), 0., 1.))),
     ]
 
     fig = plotly.subplots.make_subplots(
         rows=2,
         cols=3,
-        subplot_titles=("Position", "Rotation", "Quaternions", "Velocity", "Motors"),
+        subplot_titles=("Position", "Rotation", "Quaternions", "Velocity", "Motors", "Map"),
     )
 
     for d in data_1:
         fig.add_trace(d, row=1, col=1)
         fig.update_xaxes(title_text="Time [s]", row=1, col=1)
+        fig.update_yaxes(title_text="Position [m]", row=1, col=1)
     for d in data_2:
         fig.add_trace(d, row=1, col=2)
         fig.update_xaxes(title_text="Time [s]", row=1, col=2)
+        fig.update_yaxes(title_text="Angle [rad]", row=1, col=2)
     for d in data_3:
         fig.add_trace(d, row=1, col=3)
         fig.update_xaxes(title_text="Time [s]", row=1, col=3)
+        fig.update_yaxes(title_text="Quaternion [-]", row=1, col=3)
     for d in data_4:
         fig.add_trace(d, row=2, col=1)
         fig.update_xaxes(title_text="Time [s]", row=2, col=1)
+        fig.update_yaxes(title_text="Speed [m/s]", row=2, col=1)
     for d in data_5:
         fig.add_trace(d, row=2, col=2)
         fig.update_xaxes(title_text="Time [s]", row=2, col=2)
+        fig.update_yaxes(title_text="Force [N]", row=2, col=2)
+    for d in data_6:
+        fig.add_trace(d, row=2, col=3)
+        fig.update_xaxes(title_text="Position [m]", row=2, col=3)
+        fig.update_yaxes(title_text="Position [m]", row=2, col=3)
 
     plotly.offline.plot(fig, filename=title + ".html")
 
@@ -118,9 +132,20 @@ if __name__ == '__main__':
     tgt[:, 0] = 0. * np.ones(N_SAMPLES)
     tgt[:, 1] = 0. * np.ones(N_SAMPLES)
     tgt[:, 2] = 5. * np.ones(N_SAMPLES)
-    tgt[:, 3] = 0. * np.ones(N_SAMPLES)
+
+    s0 = np.zeros(14)
+    s0[drone.State.x.value] = 10.
+    s0[drone.State.y.value] = 3.
+    s0[drone.State.z.value] = 5.
+    s0[drone.State.q_0.value] = np.cos(np.pi / 2. / 2.)
+    s0[drone.State.q_i.value] = 0.
+    s0[drone.State.q_j.value] = 0.
+    s0[drone.State.q_k.value] = np.sin(np.pi / 2. / 2.)
+    s0[drone.State.vx.value] = 7.
+    s0[drone.State.vy.value] = -4.
+    s0[drone.State.vz.value] = 0.
 
     # define input vector
-    s_height, e_height, u_height = run_sim(tgt, DT, v_x0=10., z0=5., r_disturb=1.0)
+    s_height, e_height, u_height = run_sim(tgt, DT, s0, r_disturb=0.8)
     plot_result(t, s_height, e_height, u_height, "height_test")
 
