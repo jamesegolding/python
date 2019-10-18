@@ -7,10 +7,8 @@ class QuaternionTest(unittest.TestCase):
 
     def test_baseline(self):
         """
-        Test case single example transformations vs baseline
-        :return: prints to file
+        Quaternions: Compare transformations to baseline
         """
-
         x = np.array([0., 1., 0.])
         angles = np.array([np.pi / 2., np.pi / 2., np.pi / 2., np.pi / 8., np.pi / 8., np.pi / 8.])
         i_axis = np.array([0, 1, 2, 2, 1, 0])
@@ -32,7 +30,9 @@ class QuaternionTest(unittest.TestCase):
 
 
     def test_consistency(self):
-
+        """
+        Quaternions: Convert to and from quaternions and check consistency
+        """
         for i in range(100):
             a_0 = quaternion.euler_fix_quadrant(2 * np.pi * np.random.rand(3))
             n_0 = np.random.rand(3)
