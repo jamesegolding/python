@@ -25,7 +25,7 @@ jobs:
           name: run tests
           command: |
             . venv/bin/activate
-            nosetests -verbosity=3 -s ./drone > test-report.txt 2>&1
+            nosetests -verbosity=3 ./drone > test-report.txt 2>&1
 
       - save_cache:
           paths:
