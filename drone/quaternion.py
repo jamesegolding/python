@@ -53,7 +53,7 @@ def rate_matrix_body(q: np.ndarray):
 
 
 @numba.jit(nopython=True)
-def transform(v: np.ndarray, q: np.ndarray):
+def transform(v: np.ndarray, q: np.ndarray, q_conj: np.ndarray = None):
     """
     Calculate quaternion conjugate
     :param v: vector
@@ -61,9 +61,48 @@ def transform(v: np.ndarray, q: np.ndarray):
     :return: vector transformed by quaternion
     """
 
+    if q_conj is None:
+        q_conj = conjugate(q)
+
     v_pad = np.concatenate((np.array([0.]), v))
 
-    return product(q, product(v_pad, conjugate(q)))[1:]
+    return product(q, product(v_pad, q_conj))[1:]
+
+
+@numba.jit(nopython=True)
+def transform_inv(v: np.ndarray, q: np.ndarray):
+    """
+    Calculate quaternion conjugate
+    :param v: vector
+    :param q: quaternion
+    :return: vector inverse-transformed by quaternion
+    """
+
+    q_conj = conjugate(q)
+
+    return transform(v, q_conj, q)
+
+
+@numba.jit(nopython=True)
+def integrate(q: np.ndarray, n_body: np.ndarray, dt: float):
+    """
+    Calculate integrate single time step quaternion
+    :param q: quaternion
+    :param n_body: rotational velocity in body frame
+    :param dt: time step
+    :return: quaternion at t+1
+    """
+
+    n_body_norm = utils.norm2(n_body)
+
+    q_hat = np.concatenate((
+        np.array([np.cos(0.5 * n_body_norm * dt)]),
+        np.sin(0.5 * n_body_norm * dt) * utils.normalize(n_body),
+    ))
+
+    q = product(q_hat, q)
+
+    return q
 
 
 @numba.jit(nopython=True)

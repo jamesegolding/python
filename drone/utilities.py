@@ -64,4 +64,3 @@ def quadrant(a: float):
         a = a - 2 * np.pi
 
     return a
-
