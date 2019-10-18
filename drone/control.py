@@ -15,18 +15,18 @@ logger.setLevel(logging.INFO)
 # attitude control parameters
 K_P = 0.1
 K_V = 0.3
-K_Q = 2.0
-K_W = 0.9
+K_Q = 0.1
+K_W = 0.05
 THETA_MAX = np.pi / 8.
 
 
-def lqr_gain(A, B, Q, R):
+def lqr_gain(a, b, q, r):
 
     # first, try to solve the riccati equation
-    s = scipy.linalg.solve_continuous_are(A, B, Q, R)
+    s = scipy.linalg.solve_continuous_are(a, b, q, r)
 
     # compute the LQR gain
-    k = np.dot(np.linalg.inv(R), (np.dot(B.T, s)))
+    k = np.dot(np.linalg.inv(r), (np.dot(b.T, s)))
 
     return k
 
@@ -50,8 +50,6 @@ def update(s: np.ndarray,
         if max(u) > f_motor_max:
             u = u - (max(u) - f_motor_max)
 
-    u = utils.clip(u, a_min=0., a_max=f_motor_max)
-
     return u
 
 
@@ -60,7 +58,7 @@ def vertical(s: np.ndarray,
              tgt_z: np.ndarray,
              ):
 
-    e_z = np.array([s[2], s[9]]) - np.array([tgt_z, 0])
+    e_z = np.array([s[2], s[9], 0., 0., 0., 0.]) - np.array([tgt_z, 0., 0., 0., 0., 0.])
 
     u = -K_Z @ e_z
 

@@ -20,31 +20,34 @@ def from_state(s: np.ndarray, g: np.ndarray):
     n_body = s[10:13]
 
     # transform acceleration into body frame
-    g_body = quaternion.transform_inv(g + np.array([0., 0., G]), q)
+    g_world = g + np.array([0., 0., G])
+    g_body = quaternion.transform_inv(g_world, q)
     accelerometer = g_body + np.random.normal(0., std_g_xyz_noise, 3)
 
     # convert quaternion acceleration to angular acceleration
     gyroscope = n_body + np.random.normal(0., std_n_axyz_noise, 3)
 
     # calculate magnetometer heading
-    magnetometer = quaternion.to_rot_mat(q)[:, 0] + np.random.normal(0., std_e_mag_noise, 3)
+    e_compass_world = np.array([np.cos(np.pi / 3.), 0., np.sin(np.pi / 3.)])
+    e_compass_body = quaternion.transform_inv(e_compass_world, q)
+    magnetometer = e_compass_body + np.random.normal(0., std_e_mag_noise, 3)
 
     sensor_state = Sensor(accelerometer=accelerometer, gyroscope=gyroscope, magnetometer=magnetometer)
 
     return sensor_state
 
 
-#@numba.jit(nopython=True)
+@numba.jit(nopython=True)
 def to_state(sensor_state: Sensor,
              filter_state: Filter,
              u: np.ndarray,
              dt: float,
-             s: np.ndarray,
              ):
 
     # calculate orientation
     q, n_body = madgwick(sensor_state, filter_state, dt)
-    x, v = filter_translational(sensor_state, filter_state, u, dt, s)
+    x, v = filter_translational(sensor_state, filter_state, u, dt)
+    df_motor = drone.calc_motor_derivative(filter_state.s, u)
 
     # update state vector
     s = filter_state.s
@@ -52,6 +55,7 @@ def to_state(sensor_state: Sensor,
     s[3:7] = q
     s[7:10] = v
     s[10:13] = n_body
+    s[13:17] = utils.clip(s[13:17] + df_motor * dt, a_min=0., a_max=f_motor_max)
 
     # update filter (can't _replace in numba)
     filter_state = Filter(s=s,
@@ -78,7 +82,6 @@ def kalman_fo_real(sensor_state: Sensor,
     v = s[7:10]
     q = s[3:7]
 
-    u = utils.clip(u, a_min=0., a_max=f_motor_max)
     g_model = drone.calc_translational_derivative(s, u)
     g_sensor = quaternion.transform_inv(accel, q) - np.array([0., 0., G])
 
@@ -130,12 +133,11 @@ def kalman_fo_real(sensor_state: Sensor,
     return x_post[:3], x_post[3:6], p
 
 
-#@numba.jit(nopython=True)
+@numba.jit(nopython=True)
 def filter_translational(sensor_state: Sensor,
                          filter_state: Filter,
                          u: np.ndarray,
                          dt: float,
-                         s_actual: np.ndarray,
                          ):
 
     # get working variables
@@ -147,12 +149,8 @@ def filter_translational(sensor_state: Sensor,
     v = s[7:10]
     q = s[3:7]
 
-    u = utils.clip(u, a_min=0., a_max=f_motor_max)
     g_model = drone.calc_translational_derivative(s, u)
     g_sensor = quaternion.transform(accel, q) - np.array([0., 0., G])
-
-    #print(g_model)
-    #print(g_sensor)
 
     # merge
     g = (1 - r_sensor) * g_model + r_sensor * g_sensor
@@ -163,7 +161,7 @@ def filter_translational(sensor_state: Sensor,
     return x, v
 
 
-#@numba.jit(nopython=True)
+@numba.jit(nopython=True)
 def madgwick(sensor_state: Sensor,
              filter_state: Filter,
              dt: float
@@ -172,27 +170,27 @@ def madgwick(sensor_state: Sensor,
     # get working variables
     q = filter_state.s[3:7]
     gain = filter_state.r_madgwick_gain
-    accel = sensor_state.accelerometer
-    gyro = sensor_state.gyroscope
-    magnet = sensor_state.magnetometer
+    g_accel = sensor_state.accelerometer
+    n_gyro = sensor_state.gyroscope
+    e_magnet = sensor_state.magnetometer
 
     # normalize accelerometer
-    a_norm = utils.norm2(accel)
-    m_norm = utils.norm2(magnet)
+    g_norm = utils.norm2(g_accel)
+    e_norm = utils.norm2(e_magnet)
 
-    if (a_norm > 0.) and (m_norm > 0.):
+    if (g_norm > 0.) and (e_norm > 0.):
 
-        h = quaternion.transform(magnet, q)
+        h = quaternion.transform(e_magnet, q)
         b = np.array([0., utils.norm2(h[0:2]), 0., h[2]])
 
         # gradient descent step
         f = np.array([
-            2 * (q[1] * q[3] - q[0] * q[2]) - accel[0],
-            2 * (q[0] * q[1] + q[2] * q[3]) - accel[1],
-            2 * (0.5 - q[1] ** 2 - q[2] ** 2) - accel[2],
-            2 * b[1] * (0.5 - q[2] ** 2 - q[3] ** 2) + 2 * b[3] * (q[1] * q[3] - q[0] * q[2]) - magnet[0],
-            2 * b[1] * (q[1] * q[2] - q[0] * q[3]) + 2 * b[3] * (q[0] * q[1] + q[2] * q[3]) - magnet[1],
-            2 * b[1] * (q[0] * q[2] + q[1] * q[3]) + 2 * b[3] * (0.5 - q[1] ** 2 - q[2] ** 2) - magnet[2],
+            2 * (q[1] * q[3] - q[0] * q[2]) - g_accel[0],
+            2 * (q[0] * q[1] + q[2] * q[3]) - g_accel[1],
+            2 * (0.5 - q[1] ** 2 - q[2] ** 2) - g_accel[2],
+            2 * b[1] * (0.5 - q[2] ** 2 - q[3] ** 2) + 2 * b[3] * (q[1] * q[3] - q[0] * q[2]) - e_magnet[0],
+            2 * b[1] * (q[1] * q[2] - q[0] * q[3]) + 2 * b[3] * (q[0] * q[1] + q[2] * q[3]) - e_magnet[1],
+            2 * b[1] * (q[0] * q[2] + q[1] * q[3]) + 2 * b[3] * (0.5 - q[1] ** 2 - q[2] ** 2) - e_magnet[2],
         ])
 
         j = np.array([
@@ -204,20 +202,17 @@ def madgwick(sensor_state: Sensor,
             [2*b[1]*q[2],               2*b[1]*q[3]-4*b[3]*q[1],  2*b[1]*q[0]-4*b[3]*q[2],  2*b[1]*q[1]],
         ])
 
-        step = utils.normalize(j.T @ f)
-
-        # rate of change of q
-        o_step = -gain * step
+        # get step update from accelerometer and magnetometer
+        o_step = -1 * gain * utils.normalize(j.T @ f)
 
         w_body = quaternion.rate_matrix_body(q)
         n_step = quaternion.to_angular_velocity(w_body, o_step)
+        n_body = n_gyro + n_step
 
-        n_body = gyro + n_step
+        # integrate
+        q = quaternion.integrate(q, n_body, dt)
 
     else:
         n_body = np.zeros(3)
-
-    # integrate
-    q = quaternion.integrate(q, n_body, dt)
 
     return q, n_body
