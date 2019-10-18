@@ -25,6 +25,10 @@ class State(enum.Enum):
     nx = 10
     ny = 11
     nz = 12
+    fft = 13
+    flf = 14
+    frt = 15
+    frr = 16
 
 
 MOTOR_MAT = np.array([
@@ -36,19 +40,20 @@ MOTOR_MAT = np.array([
 
 def vertical_state_space():
 
-    a = np.array([
-        [0., 1.],  # vz
-        [0., -0.5 * rho * cd_z],  # gz
-    ])
+    a = np.vstack((
+        np.array([0., 1., 0., 0., 0., 0.]),  # vz
+        np.hstack((np.array([0., -0.5 * rho * cd_z]), (1. / m) * np.ones(4))),  # gz
+        np.hstack((np.zeros((4, 2)), (-1. / tau_motor) * np.eye(4))),
+    ))
 
-    b = np.array([
-        [0., 0., 0., 0.],
-        [1 / m, 1 / m, 1 / m, 1 / m],
-    ])
+    b = np.vstack((
+        np.zeros((2, 4)),
+        (1. / tau_motor) * np.eye(4),
+    ))
 
     u_0 = 0.25 * m * G * np.ones(4)
 
-    q = 100 * np.eye(2, 2)
+    q = np.diag(np.array([100., 100., 1., 1., 1., 1.]))
     r = 1 * np.eye(4, 4)
 
     return a, b, q, r, u_0
@@ -59,12 +64,13 @@ def torque_motor_inv():
     return np.linalg.inv(np.vstack((np.ones((1, 4)), MOTOR_MAT)))
 
 
-#@numba.jit(nopython=True)
+@numba.jit(nopython=True)
 def calc_translational_derivative(s: np.ndarray, u: np.ndarray):
 
     x = s[:3]    # translational position (world to body)
     q = s[3:7]   # quaternion (world to body)
     v = s[7:10]  # translational velocity (world)
+    f_motor = s[13:17]  # motor forces
 
     # convert v into body frame
     v_body = quaternion.transform_inv(v, q)
@@ -73,7 +79,7 @@ def calc_translational_derivative(s: np.ndarray, u: np.ndarray):
     f_gravity_w = m * np.array([0., 0., -G])
     cd_vec = np.array([cd_xy, cd_xy, cd_z])
     f_drag_b = -0.5 * rho * np.multiply(cd_vec, np.multiply(v_body, np.abs(v_body)))
-    f_motor_b = np.array([0., 0., u.sum()])
+    f_motor_b = np.array([0., 0., f_motor.sum()])
 
     if x[2] < 0:
         f_ground_w = np.array([0., 0., -k_ground * x[2] - d_ground * v[2]])
@@ -90,9 +96,10 @@ def calc_translational_derivative(s: np.ndarray, u: np.ndarray):
 def calc_rotational_derivative(s: np.ndarray, u: np.ndarray) -> np.ndarray:
 
     n_body = s[10:13]  # angular velocities (body)
+    f_motor = s[13:17]  # motor forces
 
     # calculate contributions to torque
-    t_motor = MOTOR_MAT @ u
+    t_motor = MOTOR_MAT @ f_motor
     t_inert = np.array([(J_yy - J_zz) * n_body[1] * n_body[2],
                         (J_zz - J_xx) * n_body[2] * n_body[0],
                         (J_xx - J_yy) * n_body[0] * n_body[1]])
@@ -105,11 +112,17 @@ def calc_rotational_derivative(s: np.ndarray, u: np.ndarray) -> np.ndarray:
     return dn_body
 
 
-#@numba.jit(nopython=True)
-def calc_derivative(s: np.ndarray, u: np.ndarray):
+@numba.jit(nopython=True)
+def calc_motor_derivative(s: np.ndarray, u: np.ndarray) -> np.ndarray:
 
-    # motor performance limits
-    u = utils.clip(u, a_min=0., a_max=f_motor_max)
+    f_motor = s[13:17]
+    df = (1. / tau_motor) * (u - f_motor)  # first order response
+
+    return df
+
+
+@numba.jit(nopython=True)
+def calc_derivative(s: np.ndarray, u: np.ndarray):
 
     # rates
     v = s[7:10]
@@ -118,20 +131,22 @@ def calc_derivative(s: np.ndarray, u: np.ndarray):
     # accelerations
     g = calc_translational_derivative(s, u) + np.random.normal(0., std_g_dist, 3)
     dn_body = calc_rotational_derivative(s, u) + np.random.normal(0., std_dn_dist, 3)
+    df_motor = calc_motor_derivative(s, u)
 
-    return v, n_body, g, dn_body
+    return v, n_body, g, dn_body, df_motor
 
 
-#@numba.jit(nopython=True)
+@numba.jit(nopython=True)
 def step(s: np.ndarray, u: np.ndarray, dt: float):
 
-    v, n_body, g, dn_body = calc_derivative(s, u)
+    v, n_body, g, dn_body, df_motor = calc_derivative(s, u)
 
     # euler integration
     s[:3]  = s[:3] + v * dt + 0.5 * g * dt ** 2
     s[3:7] = quaternion.integrate(s[3:7], n_body, dt)
     s[7:10] = s[7:10] + g * dt
     s[10:13] = s[10:13] + dn_body * dt
+    s[13:17] = utils.clip(s[13:17] + df_motor * dt, a_min=0., a_max=f_motor_max)
 
     # for safety, re-normalize q
     #s[3:7] = utils.normalize(s[3:7])
