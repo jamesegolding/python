@@ -12,7 +12,7 @@ class UtilitiesTest(unittest.TestCase):
         for i in range(10):
             x = 10. * np.random.rand(3)
             x_norm = utils.norm2(x)
-            self.assertAlmostEqual(np.multiply(x, x).sum(), x_norm ** 2, 4)
+            self.assertAlmostEqual(np.multiply(x, x).sum() + 1, x_norm ** 2, 4)
 
     def test_normalize(self):
         """
