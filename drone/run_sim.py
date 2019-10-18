@@ -20,16 +20,16 @@ def run_sim(t: np.ndarray, target: np.ndarray,
             ):
 
     # initialize vectors
-    s = np.empty((t.shape[0], 17));          s[:] = np.nan
-    s_est = np.empty((t.shape[0], 17));      s_est[:] = np.nan
-    g = np.empty((t.shape[0], 3));           g[:] = np.nan
-    dn_body = np.empty((t.shape[0], 3));     dn_body[:] = np.nan
-    e = np.empty((t.shape[0], 3));           e[:] = np.nan
-    e_est = np.empty((t.shape[0], 3));       e_est[:] = np.nan
-    u = np.empty((t.shape[0], 4));           u[:] = np.nan
-    g_sensor = np.empty((t.shape[0], 3));    g_sensor[:] = np.nan
-    n_sensor = np.empty((t.shape[0], 3));    n_sensor[:] = np.nan
-    en_sensor = np.empty((t.shape[0], 3));   en_sensor[:] = np.nan
+    s         = np.nan * np.ones((t.shape[0], 17))
+    s_est     = np.nan * np.ones((t.shape[0], 17))
+    g         = np.nan * np.ones((t.shape[0], 3))
+    dn_body   = np.nan * np.ones((t.shape[0], 3))
+    e         = np.nan * np.ones((t.shape[0], 3))
+    e_est     = np.nan * np.ones((t.shape[0], 3))
+    u         = np.nan * np.ones((t.shape[0], 4))
+    g_sensor  = np.nan * np.ones((t.shape[0], 3))
+    n_sensor  = np.nan * np.ones((t.shape[0], 3))
+    en_sensor = np.nan * np.ones((t.shape[0], 3))
 
     # define initial conditions
     s[0, :] = s0

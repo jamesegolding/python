@@ -1,5 +1,6 @@
 import numpy as np
 import numba
+import unittest
 import utilities as utils
 
 """
@@ -243,7 +244,7 @@ def from_rot_mat(r: np.ndarray):
             np.sqrt(1 - r[0, 0] - r[1, 1] + r[2, 2]),
         ])
     else:
-        raise Exception(f"Unexpected rotation matrix form\n{r}")
+        return np.nan * np.ones(4)
 
 
 @numba.jit(nopython=True)
@@ -296,46 +297,4 @@ def euler_fix_quadrant(e: np.ndarray):
     e_fix = e_fix - 2 * np.pi * gt_pi
 
     return e_fix
-
-
-def test():
-
-    for i in range(100):
-
-        e_0 = euler_fix_quadrant(2 * np.pi * np.random.rand(3))
-        n_0 = np.random.rand(3)
-        dn_0 = np.random.rand(3)
-
-        r_1 = euler_to_rot_mat(e_0)
-        e_1 = rot_mat_to_euler(r_1)
-
-        assert np.isclose(e_0, e_1).all(), f"({i}) Euler angles to not match\n{e_0}\n{e_1}"
-
-        q_1 = from_rot_mat(r_1)
-        r_2 = to_rot_mat(q_1)
-
-        assert np.isclose(r_1, r_2).all(), f"({i}) Rotation matrices to not match\n{r_1}\n{r_2}"
-
-        w_b_1 = rate_matrix_body(q_1)
-        o_b_1 = from_angular_velocity(w_b_1, n_0)
-        n_1 = to_angular_velocity(w_b_1, o_b_1)
-
-        assert np.isclose(n_0, n_1).all(), f"({i}) Angular velocities (body conversion) to not match\n{n_0}\n{n_1}"
-
-        w_w_1 = rate_matrix_world(q_1)
-        o_w_1 = from_angular_velocity(w_w_1, n_0)
-        n_2 = to_angular_velocity(w_w_1, o_w_1)
-
-        assert np.isclose(n_0, n_2).all(), f"({i}) Angular velocities (world conversion) to not match\n{n_0}\n{n_2}"
-
-        l_b_1 = from_angular_acceleration(w_b_1, dn_0)
-        dn_1 = to_angular_acceleration(w_b_1, l_b_1)
-
-        assert np.isclose(dn_0, dn_1).all(), f"({i}) Angular accelerations (body conversion) to not match\n{dn_0}\n{dn_1}"
-
-        l_w_1 = from_angular_acceleration(w_w_1, dn_0)
-        dn_2 = to_angular_acceleration(w_w_1, l_w_1)
-
-        assert np.isclose(dn_0, dn_2).all(), f"({i}) Angular accelerations (world conversion) to not match\n{dn_0}\n{dn_2}"
-
 
