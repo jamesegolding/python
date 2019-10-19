@@ -13,7 +13,7 @@ Sensor = collections.namedtuple('Sensor', ['accelerometer', 'gyroscope', 'magnet
 Filter = collections.namedtuple('Filter', ['s', 'p', 'r_trans_sensor', 'r_madgwick_gain'])
 
 
-@numba.jit(nopython=True)
+#@numba.jit(nopython=True)
 def from_state(s: np.ndarray, g: np.ndarray):
 
     q = s[3:7]
@@ -174,11 +174,14 @@ def madgwick(sensor_state: Sensor,
     n_gyro = sensor_state.gyroscope
     e_magnet = sensor_state.magnetometer
 
-    # normalize accelerometer
+    # find length of vectors
     g_norm = utils.norm2(g_accel)
     e_norm = utils.norm2(e_magnet)
 
-    if (g_norm > 0.) and (e_norm > 0.):
+    if (g_norm > 0.01) and (e_norm > 0.01):
+        # normalize
+        g_accel = g_accel / g_norm
+        e_magnet = e_magnet / e_norm
 
         h = quaternion.transform(e_magnet, q)
         b = np.array([0., utils.norm2(h[0:2]), 0., h[2]])
@@ -207,12 +210,12 @@ def madgwick(sensor_state: Sensor,
 
         w_body = quaternion.rate_matrix_body(q)
         n_step = quaternion.to_angular_velocity(w_body, o_step)
-        n_body = n_gyro + n_step
-
-        # integrate
-        q = quaternion.integrate(q, n_body, dt)
 
     else:
-        n_body = np.zeros(3)
+        n_step = np.zeros(3)
+
+    # integrate
+    n_body = n_gyro + n_step
+    q = quaternion.integrate(q, n_body, dt)
 
     return q, n_body

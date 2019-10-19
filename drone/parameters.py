@@ -14,8 +14,8 @@ l_arm = 0.2             # [m] arm length of drone (cg to motor)
 k_z_arm = 0.005         # [m] influence of single motor on yaw
 
 # aerodynamics
-cd_xy = 0.6             # [-] Fx / 0.5 / rho / v_x^2 (copy Fy vs v_y)
-cd_z = 0.6              # [-] Fz / 0.5 / rho / v_z^2
+cd_xy = 0.3             # [-] Fx / 0.5 / rho / v_x^2 (copy Fy vs v_y)
+cd_z = 0.3              # [-] Fz / 0.5 / rho / v_z^2
 cd_axy = 0.1            # [-] Mx / 0.5 / rho / n_x^2 (copy My vs n_y)
 cd_az = 0.1             # [-] Mz / 0.5 / rho / n_z^2
 

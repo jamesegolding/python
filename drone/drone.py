@@ -77,8 +77,8 @@ def calc_translational_derivative(s: np.ndarray, u: np.ndarray):
 
     # calculate contributions to translational force
     f_gravity_w = m * np.array([0., 0., -G])
-    cd_vec = np.array([cd_xy, cd_xy, cd_z])
-    f_drag_b = -0.5 * rho * np.multiply(cd_vec, np.multiply(v_body, np.abs(v_body)))
+    cd = np.array([cd_xy, cd_xy, cd_z])
+    f_drag_b = -0.5 * rho * np.multiply(cd, np.multiply(v_body, np.abs(v_body)))
     f_motor_b = np.array([0., 0., f_motor.sum()])
 
     if x[2] < 0:
@@ -103,8 +103,8 @@ def calc_rotational_derivative(s: np.ndarray, u: np.ndarray) -> np.ndarray:
     t_inert = np.array([(J_yy - J_zz) * n_body[1] * n_body[2],
                         (J_zz - J_xx) * n_body[2] * n_body[0],
                         (J_xx - J_yy) * n_body[0] * n_body[1]])
-    cd_vec = np.array([cd_axy, cd_axy, cd_az])
-    t_drag = -0.5 * rho * np.multiply(cd_vec, np.multiply(n_body, np.abs(n_body)))
+    cd = np.array([cd_axy, cd_axy, cd_az])
+    t_drag = -0.5 * rho * np.multiply(cd, np.multiply(n_body, np.abs(n_body)))
 
     # calculate angular acceleration (body)
     dn_body = np.multiply(np.array([1. / J_xx, 1. / J_yy, 1. / J_zz]), t_motor + t_inert + t_drag)

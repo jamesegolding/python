@@ -39,7 +39,7 @@ def run_sim(t: np.ndarray, target: np.ndarray,
     p[6:, 6:] = std_g_xyz_noise ** 2 * np.eye(3)
 
     # initialize filter
-    filter_state = sensor.Filter(s=s0, p=p, r_trans_sensor=0., r_madgwick_gain=0.01)
+    filter_state = sensor.Filter(s=s0, p=p, r_trans_sensor=1., r_madgwick_gain=0.1)
 
     print("Starting simulation...")
 
@@ -69,9 +69,8 @@ def run_sim(t: np.ndarray, target: np.ndarray,
             t_first = time.time()
 
     print(f"Simulation complete")
-    print(f"First time step: {t_first - t_start:.2f} seconds")
-    print(f"Remaining time steps: {(time.time() - t_first) / (len(t) - 1):.5f} seconds")
-
+    print(f"First time step: {t_first - t_start:.2f} s")
+    print(f"Remaining time steps: {1e3 * (time.time() - t_first) / (len(t) - 1):.2f} ms")
 
     summary = dict(
         t=t, s=s, s_est=s_est, g=g, dn_body=dn_body, u=u, e=e, e_est=e_est,
@@ -84,7 +83,7 @@ def run_sim(t: np.ndarray, target: np.ndarray,
 if __name__ == '__main__':
 
     # length and time step of simulations
-    T_MAX = 15
+    T_MAX = 10.
     DT = 0.002
     MODE = "Roll"
 
@@ -119,7 +118,6 @@ if __name__ == '__main__':
     s0[drone.State.vx.value] = 0.
     s0[drone.State.vy.value] = 0.
     s0[drone.State.vz.value] = 0.
-
 
     # run
     result = run_sim(t, tgt, s0)
