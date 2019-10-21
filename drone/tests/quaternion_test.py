@@ -1,7 +1,8 @@
 
 import unittest
 import numpy as np
-import quaternion
+from lib import quaternion
+
 
 class QuaternionTest(unittest.TestCase):
 

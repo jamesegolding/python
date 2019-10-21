@@ -64,3 +64,18 @@ def quadrant(a: float):
         a = a - 2 * np.pi
 
     return a
+
+
+@numba.jit(nopython=True)
+def smooth_symmetric_clip(a: np.ndarray, a_clip: float):
+
+    a = a_clip * np.sign(a) * (1 - np.exp(-np.abs(a) / a_clip))
+
+    return a
+
+
+@numba.jit(nopython=True)
+def signed_sqrt(a):
+
+    return np.sign(a) * np.sqrt(np.abs(a))
+

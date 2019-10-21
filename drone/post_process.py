@@ -1,9 +1,9 @@
 import numpy as np
 import plotly
 
-import visuals
-import utilities as utils
-from parameters import *
+from lib import visuals
+from lib import utilities as utils
+from lib.parameters import *
 
 import logging
 logger = logging.getLogger("post_proc")

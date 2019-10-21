@@ -1,7 +1,6 @@
 import numpy as np
 import numba
-import unittest
-import utilities as utils
+from lib import utilities as utils
 
 """
 Quaternion Definitions and Transformations based on:
@@ -245,6 +244,35 @@ def from_rot_mat(r: np.ndarray):
         ])
     else:
         return np.nan * np.ones(4)
+
+
+
+@numba.jit(nopython=True)
+def to_axis_angle(q: np.ndarray):
+    """
+    Calculate axis rotation by angle from quaternion
+    :param q: quaternion
+    :return: axis
+    :return: angle
+    """
+
+    theta = 2 * np.arccos(q[0])
+    axis = utils.normalize(q[1:])
+
+    return axis, theta
+
+
+@numba.jit(nopython=True)
+def from_axis_angle(axis: np.ndarray, theta: float):
+    """
+    Calculate quaternion from rotation by angle about axis
+    :param axis: axis
+    :param theta: angle
+    :return: quaternion
+    """
+
+    return np.concatenate((np.array([np.cos(theta / 2.)]),
+                           np.sin(theta / 2.) * axis))
 
 
 @numba.jit(nopython=True)

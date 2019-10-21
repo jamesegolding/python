@@ -1,10 +1,8 @@
 import numpy as np
 import numba
 import enum
-import quaternion
-from parameters import *
-import utilities as utils
-
+from lib import quaternion, utilities as utils
+from lib.parameters import *
 
 import logging
 logger = logging.getLogger("drone")

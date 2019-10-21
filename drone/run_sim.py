@@ -1,14 +1,13 @@
 import numpy as np
-import plotly
 import time
 
-import drone
-import sensor
-import quaternion
-import control
-from parameters import *
+from lib import control
+from lib import drone
+from lib import quaternion
+from lib import sensor
+from lib import utilities as utils
+from lib.parameters import *
 import post_process
-import utilities as utils
 
 import logging
 logger = logging.getLogger("run_sim")
@@ -39,7 +38,7 @@ def run_sim(t: np.ndarray, target: np.ndarray,
     p[6:, 6:] = std_g_xyz_noise ** 2 * np.eye(3)
 
     # initialize filter
-    filter_state = sensor.Filter(s=s0, p=p, r_trans_sensor=1., r_madgwick_gain=0.1)
+    filter_state = sensor.Filter(s=s0, p=p, r_trans_sensor=0., r_madgwick_gain=0.02)
 
     print("Starting simulation...")
 
