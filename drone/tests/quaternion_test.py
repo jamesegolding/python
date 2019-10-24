@@ -29,6 +29,23 @@ class QuaternionTest(unittest.TestCase):
             x = quaternion.transform(x, q)
             self.assertTrue(np.isclose(x, x_baseline[i, :]).all(), f"Transform vs baseline\n{x}\n{x_baseline[i, :]}")
 
+    def test_inverses(self):
+        """
+        Quaternions: Check inverse rotation matrix conjugate
+        """
+        for i in range(10):
+            a_0 = quaternion.euler_fix_quadrant(2 * np.pi * np.random.rand())
+            e_0 = np.random.rand(3)
+
+            # make a non unit quaternion
+            q = quaternion.from_axis_angle(e_0, a_0) + np.array([0., 0., 0.5, 0.])
+
+            q_conj = quaternion.conjugate(q)
+            r = quaternion.to_rot_mat(q)
+
+            r_inv = np.linalg.inv(r)
+            r_conj = quaternion.to_rot_mat(q_conj)
+            self.assertTrue(np.isclose(r_conj, r_inv).all(), f"Conjugate and inverse mismatch\n{r_inv}\n{r_conj}")
 
     def test_consistency(self):
         """
@@ -70,3 +87,27 @@ class QuaternionTest(unittest.TestCase):
             l_w_1 = quaternion.from_angular_acceleration(w_w_1, dn_0)
             dn_2 = quaternion.to_angular_acceleration(w_w_1, l_w_1)
             self.assertTrue(np.isclose(dn_0, dn_2).all(), f"Angular acceleration mismatch\n{dn_0}\n{dn_2}")
+
+    def test_rot_mat_der(self):
+        """
+        Quaternions: Check the rotation matrix derivative matches the numeric version
+        """
+
+        for i in range(10):
+            a_0 = quaternion.euler_fix_quadrant(2 * np.pi * np.random.rand())
+            e_0 = np.random.rand(3)
+
+            # make a non unit quaternion
+            q = quaternion.from_axis_angle(e_0, a_0) + np.array([0., 0., 0.5, 0.])
+
+            eps = 0.0001
+            for i_q in range(4):
+                dq = np.zeros(4)
+                dq[i_q] = eps
+                r_pos = quaternion.to_rot_mat(quaternion.conjugate(q + dq))
+                r_neg = quaternion.to_rot_mat(quaternion.conjugate(q - dq))
+                r_num = (r_pos - r_neg) / 2 / eps
+
+                # get algebraic solution
+                r_alg = quaternion.rot_mat_der(q, 0, b_inverse=True) @ np.array([0., 0., 1.])
+                self.assertTrue(np.isclose(r_num, r_alg).all(), f"Error in rot mat derivative\n{r_num}\n{r_alg}")

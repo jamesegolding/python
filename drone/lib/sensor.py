@@ -10,11 +10,14 @@ from lib.parameters import *
 Sensor = collections.namedtuple('Sensor', ['accelerometer', 'gyroscope', 'magnetometer'])
 Filter = collections.namedtuple('Filter', ['s', 'p', 'r_trans_sensor', 'r_madgwick_gain'])
 
+THETA_MAG = np.pi / 3.  # magnetic field elevation
+CM = np.cos(THETA_MAG)
+SM = np.sin(THETA_MAG)
+
 V_CD_GAIN = 0.05  # correction factor for drag induced acceleration
 
-
 @numba.jit(nopython=True)
-def from_state(s: np.ndarray, g: np.ndarray):
+def from_state(s: np.ndarray, g: np.ndarray, r_scale: float = 1.):
 
     q = s[3:7]
     n_body = s[10:13]
@@ -22,15 +25,15 @@ def from_state(s: np.ndarray, g: np.ndarray):
     # transform acceleration into body frame
     g_world = g + np.array([0., 0., G])
     g_body = quaternion.transform_inv(g_world, q)
-    accelerometer = g_body + np.random.normal(0., std_g_xyz_noise, 3)
+    accelerometer = g_body + r_scale * np.random.normal(0., std_g_xyz_noise, 3)
 
     # convert quaternion acceleration to angular acceleration
-    gyroscope = n_body + np.random.normal(0., std_n_axyz_noise, 3)
+    gyroscope = n_body + r_scale * np.random.normal(0., std_n_axyz_noise, 3)
 
     # calculate magnetometer heading
-    e_compass_world = np.array([np.cos(np.pi / 3.), 0., np.sin(np.pi / 3.)])
+    e_compass_world = np.array([CM, 0., SM])
     e_compass_body = quaternion.transform_inv(e_compass_world, q)
-    magnetometer = e_compass_body + np.random.normal(0., std_e_mag_noise, 3)
+    magnetometer = e_compass_body + r_scale * np.random.normal(0., std_e_mag_noise, 3)
 
     sensor_state = Sensor(accelerometer=accelerometer, gyroscope=gyroscope, magnetometer=magnetometer)
 
@@ -165,3 +168,35 @@ def madgwick(sensor_state: Sensor,
     q = quaternion.integrate(q, n_body, dt)
 
     return q, n_body
+
+
+def kalman_orientation_h(s: np.ndarray):
+    """
+    Get derivative of observation wrt state vector
+    :param s: reduced orientation state vector [q, n_body]
+    :return: H
+    """
+
+    q = s[3:7]
+
+    d_accel_d_q = G * np.array([
+        [2 * q[2],   2 * q[3],  2 * q[0],  2 * q[1]],
+        [-2 * q[1], -2 * q[0],  2 * q[3],  2 * q[2]],
+        [2 * q[0],  -2 * q[1], -2 * q[2],  2 * q[3]],
+    ])
+
+    d_gyro_d_n_body = np.eye(3)
+
+    d_mag_d_q = np.array([
+        [q[0] * CM + q[2] * SM,  q[1] * CM + q[3] * SM,  q[2] * CM + q[0] * SM,  q[3] * CM + q[1] * SM],
+        [q[3] * CM - q[1] * SM,  q[2] * CM - q[0] * SM,  q[1] * CM + q[3] * SM,  q[0] * CM + q[2] * SM],
+        [-q[2] * CM + q[0] * SM, q[3] * CM - q[1] * SM, -q[0] * CM - q[2] * SM,  q[1] * CM + q[3] * SM],
+    ])
+
+    h = np.vstack((
+        np.hstack((d_accel_d_q, np.zeros((3, 3)))),
+        np.hstack((np.zeros((3, 4)), d_gyro_d_n_body)),
+        np.hstack((d_mag_d_q, np.zeros((3, 3)))),
+    ))
+
+    return h
