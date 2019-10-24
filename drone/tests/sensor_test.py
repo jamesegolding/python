@@ -4,7 +4,7 @@ from lib import sensor
 from lib import quaternion
 from lib import utilities as utils
 
-
+"""
 def test_kalman_h_matrix(self):
 
     a_0 = quaternion.euler_fix_quadrant(2 * np.pi * np.random.rand())
@@ -38,3 +38,4 @@ def test_kalman_h_matrix(self):
 
     return h, h_numeric
 
+"""

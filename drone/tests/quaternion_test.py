@@ -98,7 +98,7 @@ class QuaternionTest(unittest.TestCase):
             e_0 = np.random.rand(3)
 
             # make a non unit quaternion
-            q = quaternion.from_axis_angle(e_0, a_0) + np.array([0., 0., 0.5, 0.])
+            q = quaternion.from_axis_angle(e_0, a_0)
 
             eps = 0.0001
             for i_q in range(4):
@@ -109,5 +109,5 @@ class QuaternionTest(unittest.TestCase):
                 r_num = (r_pos - r_neg) / 2 / eps
 
                 # get algebraic solution
-                r_alg = quaternion.rot_mat_der(q, 0, b_inverse=True) @ np.array([0., 0., 1.])
+                r_alg = quaternion.rot_mat_der(q, i_q, b_inverse=True)
                 self.assertTrue(np.isclose(r_num, r_alg).all(), f"Error in rot mat derivative\n{r_num}\n{r_alg}")
