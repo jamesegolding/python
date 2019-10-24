@@ -179,19 +179,27 @@ def kalman_orientation_h(s: np.ndarray):
 
     q = s[3:7]
 
-    d_accel_d_q = G * np.array([
-        [2 * q[2],   2 * q[3],  2 * q[0],  2 * q[1]],
-        [-2 * q[1], -2 * q[0],  2 * q[3],  2 * q[2]],
-        [2 * q[0],  -2 * q[1], -2 * q[2],  2 * q[3]],
-    ])
+    e_gravity_world = np.array([0., 0., G])
+    e_compass_world = np.array([CM, 0., SM])
+
+    drinv_dq0 = quaternion.rot_mat_der(q, 0, b_inverse=False)
+    drinv_dq1 = quaternion.rot_mat_der(q, 1, b_inverse=False)
+    drinv_dq2 = quaternion.rot_mat_der(q, 2, b_inverse=False)
+    drinv_dq3 = quaternion.rot_mat_der(q, 3, b_inverse=False)
+
+    d_accel_d_q = np.empty((3, 4))
+    d_accel_d_q[:, 0] = drinv_dq0 @ e_gravity_world
+    d_accel_d_q[:, 1] = drinv_dq1 @ e_gravity_world
+    d_accel_d_q[:, 2] = drinv_dq2 @ e_gravity_world
+    d_accel_d_q[:, 3] = drinv_dq3 @ e_gravity_world
 
     d_gyro_d_n_body = np.eye(3)
 
-    d_mag_d_q = np.array([
-        [q[0] * CM + q[2] * SM,  q[1] * CM + q[3] * SM,  q[2] * CM + q[0] * SM,  q[3] * CM + q[1] * SM],
-        [q[3] * CM - q[1] * SM,  q[2] * CM - q[0] * SM,  q[1] * CM + q[3] * SM,  q[0] * CM + q[2] * SM],
-        [-q[2] * CM + q[0] * SM, q[3] * CM - q[1] * SM, -q[0] * CM - q[2] * SM,  q[1] * CM + q[3] * SM],
-    ])
+    d_mag_d_q = np.empty((3, 4))
+    d_mag_d_q[:, 0] = drinv_dq0 @ e_compass_world
+    d_mag_d_q[:, 1] = drinv_dq1 @ e_compass_world
+    d_mag_d_q[:, 2] = drinv_dq2 @ e_compass_world
+    d_mag_d_q[:, 3] = drinv_dq3 @ e_compass_world
 
     h = np.vstack((
         np.hstack((d_accel_d_q, np.zeros((3, 3)))),

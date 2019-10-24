@@ -110,4 +110,4 @@ class QuaternionTest(unittest.TestCase):
 
                 # get algebraic solution
                 r_alg = quaternion.rot_mat_der(q, i_q, b_inverse=True)
-                self.assertTrue(np.isclose(r_num, r_alg).all(), f"Error in rot mat derivative\n{r_num}\n{r_alg}")
+                self.assertTrue(np.isclose(r_num, r_alg, rtol=1e-3).all(), f"Error in rot mat derivative\n{r_num}\n{r_alg}")
