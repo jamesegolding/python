@@ -44,7 +44,7 @@ def from_state(s: np.ndarray, g: np.ndarray, r_scale: float = 1.):
     return sensor_state
 
 
-@numba.jit(nopython=True)
+#@numba.jit(nopython=True)
 def to_state(sensor_state: Sensor,
              filter_state: Filter,
              u: np.ndarray,
@@ -220,7 +220,6 @@ def kalman_orientation(sensor_state: Sensor,
     ]))
 
     s = h_mat @ p_pred @ h_mat.T + r
-
     k = p_pred @ h_mat.T @ np.linalg.inv(s)
 
     x_update = x_pred + k @ y

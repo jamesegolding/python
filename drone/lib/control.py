@@ -2,7 +2,9 @@ import scipy.linalg
 import numpy as np
 import numba
 
-from lib import drone, quaternion, utilities as utils
+from lib import drone
+from lib import quaternion
+from lib import utilities as utils
 from lib.parameters import *
 
 import logging
@@ -34,6 +36,7 @@ A, B, Q, R, U_0 = drone.vertical_state_space()
 K_Z = lqr_gain(A, B, Q, R)
 
 
+@numba.jit(nopython=True)
 def update(s: np.ndarray,
            tgt: np.ndarray,
            ):
@@ -82,7 +85,6 @@ def attitude(s: np.ndarray,
     e_p = tgt_xy_psi[np.array([0, 1])] - s[np.array([0, 1])]
     e_v = np.array([0, 0]) - s[np.array([7, 8])]
 
-    #q_r = np.array([1., 0., 0., 0.])
     q_r = planar_ctrl_law(e_p, e_v)
 
     # overall target quaternion

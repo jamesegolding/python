@@ -435,6 +435,6 @@ def rot_mat_der(q: np.ndarray, i_q: int = 0, b_inverse: bool = False):
         return np.nan * np.ones((3, 3))
 
     if b_inverse:
-        return np.transpose(np.add(u_dv_dt, v_du_dt))
+        return np.ascontiguousarray(np.add(u_dv_dt, v_du_dt).T)
     else:
         return np.add(u_dv_dt, v_du_dt)

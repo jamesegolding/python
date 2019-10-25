@@ -73,4 +73,4 @@ class SensorTest(unittest.TestCase):
             s_neg, _, _ = drone.step(s - ds, u, dt, r_scale_dist=0.)
             f_num[:, i_reduce] = (s_pos[i_states] - s_neg[i_states]) / 2 / eps
 
-
+        self.assertTrue(True)

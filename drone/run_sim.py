@@ -6,7 +6,6 @@ from lib import drone
 from lib import quaternion
 from lib import sensor
 from lib import utilities as utils
-from lib.parameters import *
 import post_process
 
 import logging
@@ -37,7 +36,7 @@ def run_sim(t: np.ndarray, target: np.ndarray,
     p = np.zeros((11, 11))
 
     # initialize filter
-    filter_state = sensor.Filter(s=s0, p=p, r_trans_sensor=0., r_madgwick_gain=0.02)
+    filter_state = sensor.Filter(s=s0, p=p, r_trans_sensor=0.3, r_madgwick_gain=0.02)
 
     print("Starting simulation...")
 
