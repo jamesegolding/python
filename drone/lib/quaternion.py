@@ -365,6 +365,36 @@ def euler_fix_quadrant(e: np.ndarray):
 
 
 @numba.jit(nopython=True)
+def integrate_der(q: np.ndarray, n_body: np.ndarray, dt: float):
+    """
+    Return the derivative of the integrated quaternion q as a function of previous time step q
+    and rotational velocity
+    :param q: quaternion
+    :param n_body: rotational velocity vector
+    :param dt: time step
+    :return: q_der_q and q_der_n
+    """
+
+    q = utils.normalize(q)
+    n_body_norm = utils.norm2(n_body)
+    w_world = rate_matrix_world(q)
+
+    q_hat = np.concatenate((
+        np.array([np.cos(0.5 * n_body_norm * dt)]),
+        np.sin(0.5 * n_body_norm * dt) * utils.normalize(n_body),
+    ))
+    q_hat_mat = matrix(q_hat)
+
+    # derivative of q with respect to previous time step q
+    q_der_q = q_hat_mat @ (np.eye(4) - q.reshape(-1,1) @ q.reshape(1,-1))
+
+    # derivative of q with respect to rotational velocity
+    q_der_n = dt * 0.5 * w_world.T
+
+    return q_der_q, q_der_n
+
+
+@numba.jit(nopython=True)
 def rot_mat_der(q: np.ndarray, i_q: int = 0, b_inverse: bool = False):
     """
     Return the derivative of a rotation matrix wrt given element
@@ -404,8 +434,7 @@ def rot_mat_der(q: np.ndarray, i_q: int = 0, b_inverse: bool = False):
     else:
         return np.nan * np.ones((3, 3))
 
-    dr_dqi = u_dv_dt + v_du_dt
     if b_inverse:
-        return dr_dqi.T
+        return np.transpose(np.add(u_dv_dt, v_du_dt))
     else:
-        return dr_dqi
+        return np.add(u_dv_dt, v_du_dt)

@@ -20,8 +20,8 @@ cd_axy = 0.1            # [-] Mx / 0.5 / rho / n_x^2 (copy My vs n_y)
 cd_az = 0.1             # [-] Mz / 0.5 / rho / n_z^2
 
 # disturbances
-std_g_dist = 0.1        # [m/s/s]
-std_dn_dist = 0.1       # [m/s/s]
+std_g_dist = 0.5        # [m/s/s]
+std_dn_dist = 0.2       # [rad/s/s]
 
 # sensor noise
 std_g_xyz_noise = 0.2   # [m/s/s]
@@ -31,6 +31,7 @@ std_e_mag_noise = 0.05  # [-] orientation vector
 # motor_max
 f_motor_max = 6.5727    # motor max force
 tau_motor = 0.05        # motor response time constant
+std_motor = 0.05
 
 # grounding
 k_ground = 1e2

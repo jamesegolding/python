@@ -120,24 +120,24 @@ def calc_motor_derivative(s: np.ndarray, u: np.ndarray) -> np.ndarray:
 
 
 @numba.jit(nopython=True)
-def calc_derivative(s: np.ndarray, u: np.ndarray):
+def calc_derivative(s: np.ndarray, u: np.ndarray, r_scale_dist: float = 1.):
 
     # rates
     v = s[7:10]
     n_body = s[10:13]
 
     # accelerations
-    g = calc_translational_derivative(s, u) + np.random.normal(0., std_g_dist, 3)
-    dn_body = calc_rotational_derivative(s, u) + np.random.normal(0., std_dn_dist, 3)
+    g = calc_translational_derivative(s, u) + r_scale_dist * np.random.normal(0., std_g_dist, 3)
+    dn_body = calc_rotational_derivative(s, u) + r_scale_dist * np.random.normal(0., std_dn_dist, 3)
     df_motor = calc_motor_derivative(s, u)
 
     return v, n_body, g, dn_body, df_motor
 
 
 @numba.jit(nopython=True)
-def step(s: np.ndarray, u: np.ndarray, dt: float):
+def step(s: np.ndarray, u: np.ndarray, dt: float, r_scale_dist: float = 1.):
 
-    v, n_body, g, dn_body, df_motor = calc_derivative(s, u)
+    v, n_body, g, dn_body, df_motor = calc_derivative(s, u, r_scale_dist)
 
     # euler integration
     s[:3]  = s[:3] + v * dt + 0.5 * g * dt ** 2
@@ -145,8 +145,5 @@ def step(s: np.ndarray, u: np.ndarray, dt: float):
     s[7:10] = s[7:10] + g * dt
     s[10:13] = s[10:13] + dn_body * dt
     s[13:17] = utils.clip(s[13:17] + df_motor * dt, a_min=0., a_max=f_motor_max)
-
-    # for safety, re-normalize q
-    #s[3:7] = utils.normalize(s[3:7])
 
     return s, g, dn_body

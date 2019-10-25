@@ -34,8 +34,7 @@ def run_sim(t: np.ndarray, target: np.ndarray,
     s[0, :] = s0
     s_est[0, :] = s0
 
-    p = np.zeros((9, 9))
-    p[6:, 6:] = std_g_xyz_noise ** 2 * np.eye(3)
+    p = np.zeros((11, 11))
 
     # initialize filter
     filter_state = sensor.Filter(s=s0, p=p, r_trans_sensor=0., r_madgwick_gain=0.02)

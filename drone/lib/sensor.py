@@ -10,9 +10,13 @@ from lib.parameters import *
 Sensor = collections.namedtuple('Sensor', ['accelerometer', 'gyroscope', 'magnetometer'])
 Filter = collections.namedtuple('Filter', ['s', 'p', 'r_trans_sensor', 'r_madgwick_gain'])
 
+ORIENTATION_FILTER = "Kalman"
+
 THETA_MAG = np.pi / 3.  # magnetic field elevation
 CM = np.cos(THETA_MAG)
 SM = np.sin(THETA_MAG)
+
+MOTOR_MAT = drone.MOTOR_MAT
 
 V_CD_GAIN = 0.05  # correction factor for drag induced acceleration
 
@@ -59,7 +63,16 @@ def to_state(sensor_state: Sensor,
                           r_madgwick_gain=filter_state.r_madgwick_gain,
                           )
 
-    q, n_body = madgwick(sensor_state, filter_state, dt)
+    if ORIENTATION_FILTER == "Kalman":
+        q, n_body, p = kalman_orientation(sensor_state, filter_state, u, dt)
+    elif ORIENTATION_FILTER == "Madgwick":
+        q, n_body = madgwick(sensor_state, filter_state, dt)
+        p = np.zeros((11, 11))
+    else:
+        q, n_body, p = np.zeros(4), np.zeros(3), np.zeros((11, 11))
+
+    # kalman
+    #p_kalman = np.zeros((11, 11))
     x, v = filter_translational(sensor_state, filter_state, u, dt)
 
     # update state vector
@@ -70,7 +83,7 @@ def to_state(sensor_state: Sensor,
 
     # update filter (can't _replace in numba)
     filter_state = Filter(s=s,
-                          p=filter_state.p,
+                          p=p,
                           r_trans_sensor=filter_state.r_trans_sensor,
                           r_madgwick_gain=filter_state.r_madgwick_gain,
                           )
@@ -170,11 +183,61 @@ def madgwick(sensor_state: Sensor,
     return q, n_body
 
 
+@numba.jit(nopython=True)
+def kalman_orientation(sensor_state: Sensor,
+                       filter_state: Filter,
+                       u: np.ndarray,
+                       dt: float,
+                       ):
+
+    s_k_km1, g_k_km1, _ = drone.step(filter_state.s, u, dt, r_scale_dist=0.)
+    x_pred = np.concatenate((s_k_km1[3:7], s_k_km1[10:17]))
+
+    # get sensitivities
+    f_mat = kalman_orientation_f(filter_state.s, dt)
+    h_mat = kalman_orientation_h(filter_state.s)
+
+    # get model disturbance expectation
+    g = np.concatenate((
+        0.5 * dt ** 2 * std_dn_dist * np.ones(4),
+        dt * std_dn_dist * np.ones(3),
+        dt * std_motor * np.ones(4)))
+    v = g.reshape(-1, 1) @ g.reshape(1, -1)
+
+    # get prior p matrix
+    p_pred = f_mat @ filter_state.p @ f_mat.T + v
+
+    sensor_state_pred = from_state(s_k_km1, g=g_k_km1, r_scale=0.)
+    z = np.concatenate((sensor_state.accelerometer, sensor_state.gyroscope, sensor_state.magnetometer))
+    z_pred = np.concatenate((sensor_state_pred.accelerometer, sensor_state_pred.gyroscope, sensor_state_pred.magnetometer))
+    y = z - z_pred
+
+    # get measurement noise expectation
+    r = np.diag(np.array([
+        std_g_xyz_noise, std_g_xyz_noise, std_g_xyz_noise,
+        std_n_axyz_noise, std_n_axyz_noise, std_n_axyz_noise,
+        std_e_mag_noise, std_e_mag_noise, std_e_mag_noise,
+    ]))
+
+    s = h_mat @ p_pred @ h_mat.T + r
+
+    k = p_pred @ h_mat.T @ np.linalg.inv(s)
+
+    x_update = x_pred + k @ y
+    p_update = (np.eye(11) - k @ h_mat) @ p_pred
+
+    q_update = x_update[:4]
+    n_body_update = x_update[4:7]
+
+    return q_update, n_body_update, p_update
+
+
+@numba.jit(nopython=True)
 def kalman_orientation_h(s: np.ndarray):
     """
     Get derivative of observation wrt state vector
-    :param s: reduced orientation state vector [q, n_body]
-    :return: H
+    :param s: full state vector
+    :return: H matrix
     """
 
     q = s[3:7]
@@ -182,29 +245,62 @@ def kalman_orientation_h(s: np.ndarray):
     e_gravity_world = np.array([0., 0., G])
     e_compass_world = np.array([CM, 0., SM])
 
-    drinv_dq0 = quaternion.rot_mat_der(q, 0, b_inverse=False)
-    drinv_dq1 = quaternion.rot_mat_der(q, 1, b_inverse=False)
-    drinv_dq2 = quaternion.rot_mat_der(q, 2, b_inverse=False)
-    drinv_dq3 = quaternion.rot_mat_der(q, 3, b_inverse=False)
+    dr_inv_dq0 = quaternion.rot_mat_der(q, 0, b_inverse=False)
+    dr_inv_dq1 = quaternion.rot_mat_der(q, 1, b_inverse=False)
+    dr_inv_dq2 = quaternion.rot_mat_der(q, 2, b_inverse=False)
+    dr_inv_dq3 = quaternion.rot_mat_der(q, 3, b_inverse=False)
 
     d_accel_d_q = np.empty((3, 4))
-    d_accel_d_q[:, 0] = drinv_dq0 @ e_gravity_world
-    d_accel_d_q[:, 1] = drinv_dq1 @ e_gravity_world
-    d_accel_d_q[:, 2] = drinv_dq2 @ e_gravity_world
-    d_accel_d_q[:, 3] = drinv_dq3 @ e_gravity_world
+    d_accel_d_q[:, 0] = dr_inv_dq0 @ e_gravity_world
+    d_accel_d_q[:, 1] = dr_inv_dq1 @ e_gravity_world
+    d_accel_d_q[:, 2] = dr_inv_dq2 @ e_gravity_world
+    d_accel_d_q[:, 3] = dr_inv_dq3 @ e_gravity_world
 
     d_gyro_d_n_body = np.eye(3)
 
     d_mag_d_q = np.empty((3, 4))
-    d_mag_d_q[:, 0] = drinv_dq0 @ e_compass_world
-    d_mag_d_q[:, 1] = drinv_dq1 @ e_compass_world
-    d_mag_d_q[:, 2] = drinv_dq2 @ e_compass_world
-    d_mag_d_q[:, 3] = drinv_dq3 @ e_compass_world
+    d_mag_d_q[:, 0] = dr_inv_dq0 @ e_compass_world
+    d_mag_d_q[:, 1] = dr_inv_dq1 @ e_compass_world
+    d_mag_d_q[:, 2] = dr_inv_dq2 @ e_compass_world
+    d_mag_d_q[:, 3] = dr_inv_dq3 @ e_compass_world
 
     h = np.vstack((
-        np.hstack((d_accel_d_q, np.zeros((3, 3)))),
-        np.hstack((np.zeros((3, 4)), d_gyro_d_n_body)),
-        np.hstack((d_mag_d_q, np.zeros((3, 3)))),
+        np.hstack((d_accel_d_q, np.zeros((3, 7)))),
+        np.hstack((np.zeros((3, 4)), d_gyro_d_n_body, np.zeros((3, 4)))),
+        np.hstack((d_mag_d_q, np.zeros((3, 7)))),
     ))
 
     return h
+
+
+@numba.jit(nopython=True)
+def kalman_orientation_f(s: np.ndarray, dt: float):
+    """
+    Get derivative of model step function wrt state vector
+    :param s: full state vector
+    :param dt: time step
+    :return: F matrix
+    """
+    q = s[3:7]
+    n_body = s[10:13]  # angular velocities (body)
+
+    inertia_mat = np.diag(np.array([1. / J_xx, 1. / J_yy, 1. / J_zz]))
+
+    # calculate contributions to torque
+    d_motor = inertia_mat @ MOTOR_MAT
+    d_inert = inertia_mat @ np.array([
+        [0., (J_yy - J_zz) * n_body[2], (J_yy - J_zz) * n_body[1]],
+        [(J_zz - J_xx) * n_body[2], 0., (J_zz - J_xx) * n_body[0]],
+        [(J_xx - J_yy) * n_body[1], (J_xx - J_yy) * n_body[0], 0.],
+    ])
+
+    n_body_abs = np.abs(n_body)
+    d_drag = -rho * inertia_mat @ np.diag(np.array([cd_axy * n_body_abs[0], cd_axy * n_body_abs[1], cd_az * n_body_abs[2]]))
+
+    q_der_q, q_der_n = quaternion.integrate_der(q, n_body, dt)
+
+    return np.vstack((
+        np.hstack((q_der_q, q_der_n, np.zeros((4, 4)))),
+        np.hstack((np.zeros((3, 4)), np.eye(3) + dt * (d_inert + d_drag), dt * d_motor)),
+        np.hstack((np.zeros((4, 7)), (1 - dt / tau_motor) * np.eye(4))),
+    ))
