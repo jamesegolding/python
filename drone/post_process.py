@@ -113,6 +113,9 @@ def plot_result(result):
         plotly.graph_objs.Scatter(x=result["t"], y=result["g"][:, 0].squeeze(), name="gx"),
         plotly.graph_objs.Scatter(x=result["t"], y=result["g"][:, 1].squeeze(), name="gy"),
         plotly.graph_objs.Scatter(x=result["t"], y=result["g"][:, 2].squeeze() + G, name="gz"),
+        plotly.graph_objs.Scatter(x=result["t"], y=result["g_est"][:, 0].squeeze(), name="gx est", line={'dash': 'dash'}),
+        plotly.graph_objs.Scatter(x=result["t"], y=result["g_est"][:, 1].squeeze(), name="gy est", line={'dash': 'dash'}),
+        plotly.graph_objs.Scatter(x=result["t"], y=result["g_est"][:, 2].squeeze() + G, name="gz est", line={'dash': 'dash'}),
     ]
     layout['Acceleration World'] = dict(xaxis=dict(title="Time [s]"), yaxis=dict(title="Acceleration [m/s/s]"))
 

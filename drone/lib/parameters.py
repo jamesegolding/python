@@ -7,7 +7,7 @@ rho = 1.225             # [kg/m/m/m]
 m = 1.2                 # [kg]
 J_xx = 7.0e-3           # [kg*m*m]
 J_yy = 7.0e-3           # [kg*m*m]
-J_zz = 1.3e-2           # [kg*m*m]
+J_zz = 7.0e-3           # [kg*m*m]
 
 # geometry
 l_arm = 0.2             # [m] arm length of drone (cg to motor)
@@ -25,7 +25,7 @@ std_dn_dist = 0.2       # [rad/s/s]
 
 # sensor noise
 std_g_xyz_noise = 0.2   # [m/s/s]
-std_n_axyz_noise = 0.3  # [rad/s]
+std_n_axyz_noise = 0.08 # [rad/s]
 std_e_mag_noise = 0.05  # [-] orientation vector
 
 # motor_max

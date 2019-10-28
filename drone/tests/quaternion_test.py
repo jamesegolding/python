@@ -111,3 +111,40 @@ class QuaternionTest(unittest.TestCase):
                 # get algebraic solution
                 r_alg = quaternion.rot_mat_der(q, i_q, b_inverse=True)
                 self.assertTrue(np.isclose(r_num, r_alg, rtol=1e-3).all(), f"Error in rot mat derivative\n{r_num}\n{r_alg}")
+
+    def test_integrate_der(self):
+        """
+        Quaternions: Check the integration derivative matches the numeric version
+        """
+
+        for i in range(10):
+            a_0 = quaternion.euler_fix_quadrant(2 * np.pi * np.random.rand())
+            e_0 = np.random.rand(3)
+            n_body = np.random.rand(3)
+            q = quaternion.from_axis_angle(e_0, a_0)
+            dt = 0.001
+
+            # compute analytical derivative
+            q_der_q_alg, q_der_n_alg = quaternion.integrate_der(q, n_body, dt)
+
+            eps = 0.00001
+            q_der_q_num = np.zeros((4, 4))
+            for i_q in range(4):
+                dq = np.zeros(4)
+                dq[i_q] = eps
+                q_p = quaternion.integrate(q + dq, n_body, dt)
+                q_n = quaternion.integrate(q - dq, n_body, dt)
+                q_der_q_num[:, i_q] = (q_p - q_n) / 2 / eps
+
+            q_der_n_num = np.zeros((4, 3))
+            for i_n in range(3):
+                dn = np.zeros(3)
+                dn[i_n] = eps
+                q_p = quaternion.integrate(q, n_body + dn, dt)
+                q_n = quaternion.integrate(q, n_body - dn, dt)
+                q_der_n_num[:, i_n] = (q_p - q_n) / 2 / eps
+
+            self.assertTrue(np.isclose(q_der_q_num, q_der_q_alg, atol=1e-3).all(), f"Error in integral derivative wrt q"
+                                                                                   f"\n{q_der_q_num}\n{q_der_q_alg}")
+            self.assertTrue(np.isclose(q_der_n_num, q_der_n_alg, atol=1e-3).all(), f"Error in integral derivative wrt n"
+                                                                                   f"\n{q_der_n_num}\n{q_der_n_alg}")

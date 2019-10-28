@@ -36,7 +36,7 @@ A, B, Q, R, U_0 = drone.vertical_state_space()
 K_Z = lqr_gain(A, B, Q, R)
 
 
-@numba.jit(nopython=True)
+#@numba.jit(nopython=True)
 def update(s: np.ndarray,
            tgt: np.ndarray,
            ):
@@ -99,21 +99,21 @@ def attitude(s: np.ndarray,
 @numba.jit(nopython=True)
 def planar_ctrl_law(e_p_2d, e_v_2d):
 
-    e_p = np.array([0., e_p_2d[0], e_p_2d[1]])
-    e_v = np.array([0., e_v_2d[0], e_v_2d[1]])
+    e_p = np.array([e_p_2d[0], e_p_2d[1], 0.])
+    e_v = np.array([e_v_2d[0], e_v_2d[1], 0.])
     norm_e_p = utils.norm2(e_p)
     norm_e_v = utils.norm2(e_v)
 
     if norm_e_p > utils.EPS:
         # calculate axis to rotate about
-        axis_p = utils.cross(e_p / norm_e_p, np.array([0., 0., 1.]))
+        axis_p = utils.cross(np.array([0., 0., 1.]), e_p / norm_e_p)
         # calculate angle target
         theta_p = utils.smooth_symmetric_clip(K_P * norm_e_p, a_clip=THETA_MAX)
         q_p = quaternion.from_axis_angle(axis_p, theta_p)
 
-        if norm_e_v > utils.EPS:
+        if (norm_e_p < utils.EPS) and norm_e_v > utils.EPS:
             # damping terms
-            axis_v = utils.cross(e_v / norm_e_v, np.array([0., 0., 1.]))
+            axis_v = utils.cross(np.array([0., 0., 1.]), e_v / norm_e_v)
             theta_v = utils.smooth_symmetric_clip(K_V * norm_e_v, a_clip=THETA_MAX)
             q_v = quaternion.from_axis_angle(axis_v, theta_v)
         else:
@@ -124,8 +124,8 @@ def planar_ctrl_law(e_p_2d, e_v_2d):
         axis_tot, theta_tot = quaternion.to_axis_angle(q_xy)
 
         # saturate angle to limit
-        q_xy = quaternion.from_axis_angle(axis_tot,
-                                          utils.smooth_symmetric_clip(theta_tot, a_clip=THETA_MAX))
+        theta_clip = utils.smooth_symmetric_clip(theta_tot, a_clip=THETA_MAX)
+        q_xy = quaternion.from_axis_angle(axis_tot, theta_clip)
 
     else:
         q_xy = np.array([1., 0., 0., 0.])

@@ -23,11 +23,10 @@ class SensorTest(unittest.TestCase):
         # compute algebraic h matrix
         h_alg = sensor.kalman_orientation_h(s)
 
-        i_states = [3, 4, 5, 6, 10, 11, 12, 13, 14, 15, 16]
-
         # compute a finite difference H matrix
         eps = 0.0001
         h_num = np.zeros((9, 11))
+        i_states = [3, 4, 5, 6, 10, 11, 12, 13, 14, 15, 16]
         for i_s, i_reduce in zip(i_states, range(7)):
             ds = np.zeros(17)
             ds[i_s] = eps
@@ -45,32 +44,30 @@ class SensorTest(unittest.TestCase):
         """
         Sensor:      Check Orientation Kalman F matrix derivative matches the numeric version
         """
-        a_theta = quaternion.euler_fix_quadrant(2 * np.pi * np.random.rand())
-        e_axis = np.random.rand(3)
-        n_body = np.random.rand(3)
-        q = quaternion.from_axis_angle(e_axis, a_theta)
+        for i in range(10):
+            a_theta = quaternion.euler_fix_quadrant(2 * np.pi * np.random.rand())
+            e_axis = np.random.rand(3)
+            n_body = np.random.rand(3)
+            q = quaternion.from_axis_angle(e_axis, a_theta)
+            u = 5 * np.random.rand(4)
+            dt = 0.001
 
-        u = 5 * np.random.rand(4)
-        dt = 0.001
+            s = np.concatenate((
+                np.zeros(3), q, np.zeros(3), n_body, np.ones(4),
+            ))
 
-        i_states = [3, 4, 5, 6, 10, 11, 12, 13, 14, 15, 16]
+            # compute algebraic f matrix
+            f_alg = sensor.kalman_orientation_f(s, dt)
 
-        s = np.concatenate((
-            np.zeros(3), q, np.zeros(3), n_body, np.ones(4),
-        ))
+            # compute a finite difference H matrix
+            eps = 0.00001
+            f_num = np.zeros((11, 11))
+            i_states = [3, 4, 5, 6, 10, 11, 12, 13, 14, 15, 16]
+            for i_s, i_reduce in zip(i_states, range(11)):
+                ds = np.zeros(17)
+                ds[i_s] = eps
+                s_pos, _, _ = drone.step(s + ds, u, dt, r_scale_dist=0.)
+                s_neg, _, _ = drone.step(s - ds, u, dt, r_scale_dist=0.)
+                f_num[:, i_reduce] = (s_pos[i_states] - s_neg[i_states]) / 2 / eps
 
-        # compute algebraic f matrix
-        f_alg = sensor.kalman_orientation_f(s, dt)
-
-        # compute a finite difference H matrix
-        eps = 0.0001
-        f_num = np.zeros((11, 11))
-        for i_s, i_reduce in zip(i_states, range(11)):
-            ds = np.zeros(17)
-            ds[i_s] = eps
-
-            s_pos, _, _ = drone.step(s + ds, u, dt, r_scale_dist=0.)
-            s_neg, _, _ = drone.step(s - ds, u, dt, r_scale_dist=0.)
-            f_num[:, i_reduce] = (s_pos[i_states] - s_neg[i_states]) / 2 / eps
-
-        self.assertTrue(True)
+            self.assertTrue(np.isclose(f_alg, f_num, atol=1e-3).all(), f"Error in f derivative\n{f_num}\n{f_alg}")

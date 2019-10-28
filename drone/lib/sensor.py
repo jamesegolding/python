@@ -8,7 +8,7 @@ from lib.parameters import *
 
 # state definitions
 Sensor = collections.namedtuple('Sensor', ['accelerometer', 'gyroscope', 'magnetometer'])
-Filter = collections.namedtuple('Filter', ['s', 'p', 'r_trans_sensor', 'r_madgwick_gain'])
+Filter = collections.namedtuple('Filter', ['s', 'p', 'r_madgwick_gain', 'g'])
 
 ORIENTATION_FILTER = "Kalman"
 
@@ -18,7 +18,7 @@ SM = np.sin(THETA_MAG)
 
 MOTOR_MAT = drone.MOTOR_MAT
 
-V_CD_GAIN = 0.05  # correction factor for drag induced acceleration
+V_CD_GAIN = 0.0  # correction factor for drag induced acceleration
 
 @numba.jit(nopython=True)
 def from_state(s: np.ndarray, g: np.ndarray, r_scale: float = 1.):
@@ -44,24 +44,13 @@ def from_state(s: np.ndarray, g: np.ndarray, r_scale: float = 1.):
     return sensor_state
 
 
-#@numba.jit(nopython=True)
+@numba.jit(nopython=True)
 def to_state(sensor_state: Sensor,
              filter_state: Filter,
              u: np.ndarray,
              dt: float,
              ):
-
-    s = filter_state.s
-
-    # calculate orientation
-    df_motor = drone.calc_motor_derivative(filter_state.s, u)
-    s[13:17] = utils.clip(s[13:17] + df_motor * dt, a_min=0., a_max=f_motor_max)
-
-    filter_state = Filter(s=s,
-                          p=filter_state.p,
-                          r_trans_sensor=filter_state.r_trans_sensor,
-                          r_madgwick_gain=filter_state.r_madgwick_gain,
-                          )
+    s_filter = filter_state.s
 
     if ORIENTATION_FILTER == "Kalman":
         q, n_body, p = kalman_orientation(sensor_state, filter_state, u, dt)
@@ -71,21 +60,24 @@ def to_state(sensor_state: Sensor,
     else:
         q, n_body, p = np.zeros(4), np.zeros(3), np.zeros((11, 11))
 
-    # kalman
-    #p_kalman = np.zeros((11, 11))
-    x, v = filter_translational(sensor_state, filter_state, u, dt)
+    x, v, g = filter_translational(sensor_state, filter_state, u, dt)
+
+    # calculate motor force
+    df_motor = drone.calc_motor_derivative(filter_state.s, u)
 
     # update state vector
-    s[:3] = x
-    s[3:7] = q
-    s[7:10] = v
-    s[10:13] = n_body
+    s_filter[:3] = x
+    s_filter[3:7] = q
+    s_filter[7:10] = v
+    s_filter[10:13] = n_body
+    s_filter[13:17] = utils.clip(s_filter[13:17] + df_motor * dt, a_min=0., a_max=f_motor_max)
 
     # update filter (can't _replace in numba)
-    filter_state = Filter(s=s,
+    filter_state = Filter(s=s_filter,
                           p=p,
                           r_trans_sensor=filter_state.r_trans_sensor,
                           r_madgwick_gain=filter_state.r_madgwick_gain,
+                          g=g,
                           )
 
     return filter_state
@@ -99,28 +91,26 @@ def filter_translational(sensor_state: Sensor,
                          ):
 
     # get working variables
-    s = filter_state.s
-    r_sensor = filter_state.r_trans_sensor
+    s_est = filter_state.s
     accel = sensor_state.accelerometer
 
-    x = s[:3]
-    v = s[7:10]
-    q = s[3:7]
+    x = s_est[:3]
+    v = s_est[7:10]
+    q = s_est[3:7]
 
-    g_model = drone.calc_translational_derivative(s, u)
-    g_sensor = quaternion.transform(accel, q) - np.array([0., 0., G])
+    # dead reckoning
+    g = quaternion.transform(accel, q) - np.array([0., 0., G])
 
-    # merge
-    g = (1 - r_sensor) * g_model + r_sensor * g_sensor
+    # integrate
     x = x + v * dt + 0.5 * dt ** 2 * g
     v = v + g * dt
 
     # estimate translational velocity based on xy accel
     v_cd_xy_est = utils.signed_sqrt(-2 * m * accel[:2] / rho / cd_xy)
-    v_cd_est = quaternion.transform(np.array([v_cd_xy_est[0], v_cd_xy_est[1], 0.]), q)
+    v_cd_est = quaternion.transform_inv(np.array([v_cd_xy_est[0], v_cd_xy_est[1], 0.]), q)
     v[:2] = v[:2] + (v_cd_est[:2] - v[:2]) * V_CD_GAIN
 
-    return x, v
+    return x, v, g
 
 
 @numba.jit(nopython=True)
@@ -190,12 +180,13 @@ def kalman_orientation(sensor_state: Sensor,
                        dt: float,
                        ):
 
-    s_k_km1, g_k_km1, _ = drone.step(filter_state.s, u, dt, r_scale_dist=0.)
-    x_pred = np.concatenate((s_k_km1[3:7], s_k_km1[10:17]))
+    s_prev = filter_state.s.copy()
+    s_prior, g_prior, _ = drone.step(s_prev, u, dt, r_scale_dist=0.)
+    x_pred = np.concatenate((s_prior[3:7], s_prior[10:17]))
 
     # get sensitivities
-    f_mat = kalman_orientation_f(filter_state.s, dt)
-    h_mat = kalman_orientation_h(filter_state.s)
+    f_mat = kalman_orientation_f(s_prev, dt)
+    h_mat = kalman_orientation_h(s_prev)
 
     # get model disturbance expectation
     g = np.concatenate((
@@ -207,7 +198,7 @@ def kalman_orientation(sensor_state: Sensor,
     # get prior p matrix
     p_pred = f_mat @ filter_state.p @ f_mat.T + v
 
-    sensor_state_pred = from_state(s_k_km1, g=g_k_km1, r_scale=0.)
+    sensor_state_pred = from_state(s_prior, g=g_prior, r_scale=0.)
     z = np.concatenate((sensor_state.accelerometer, sensor_state.gyroscope, sensor_state.magnetometer))
     z_pred = np.concatenate((sensor_state_pred.accelerometer, sensor_state_pred.gyroscope, sensor_state_pred.magnetometer))
     y = z - z_pred
@@ -219,8 +210,9 @@ def kalman_orientation(sensor_state: Sensor,
         std_e_mag_noise, std_e_mag_noise, std_e_mag_noise,
     ]))
 
-    s = h_mat @ p_pred @ h_mat.T + r
-    k = p_pred @ h_mat.T @ np.linalg.inv(s)
+    p_h = p_pred @ np.ascontiguousarray(h_mat.T)
+    s_mat = h_mat @ p_h + r
+    k = p_h @ np.linalg.solve(s_mat, np.eye(s_mat.shape[0]))
 
     x_update = x_pred + k @ y
     p_update = (np.eye(11) - k @ h_mat) @ p_pred
@@ -303,3 +295,38 @@ def kalman_orientation_f(s: np.ndarray, dt: float):
         np.hstack((np.zeros((3, 4)), np.eye(3) + dt * (d_inert + d_drag), dt * d_motor)),
         np.hstack((np.zeros((4, 7)), (1 - dt / tau_motor) * np.eye(4))),
     ))
+
+
+def kalman_orientation_f_finite_difference(s: np.ndarray, u: np.ndarray, dt: float):
+
+    # compute a finite difference H matrix
+    eps = 0.00001
+    f_num = np.zeros((11, 11))
+    i_states = [3, 4, 5, 6, 10, 11, 12, 13, 14, 15, 16]
+    for i_s, i_reduce in zip(i_states, range(11)):
+        ds = np.zeros(17)
+        ds[i_s] = eps
+        s_pos, _, _ = drone.step(s + ds, u, dt, r_scale_dist=0.)
+        s_neg, _, _ = drone.step(s - ds, u, dt, r_scale_dist=0.)
+        f_num[:, i_reduce] = (s_pos[i_states] - s_neg[i_states]) / 2 / eps
+
+    return f_num
+
+
+def kalman_orientation_h_finite_difference(s: np.ndarray):
+    # compute a finite difference H matrix
+    eps = 0.00001
+    h_num = np.zeros((9, 11))
+    i_states = [3, 4, 5, 6, 10, 11, 12, 13, 14, 15, 16]
+    for i_s, i_reduce in zip(i_states, range(7)):
+        ds = np.zeros(17)
+        ds[i_s] = eps
+        sensor_state_p = from_state(s + ds, g=np.zeros(3), r_scale=0.)
+        sensor_state_n = from_state(s - ds, g=np.zeros(3), r_scale=0.)
+        h_num[:, i_reduce] = np.concatenate((
+            (sensor_state_p.accelerometer - sensor_state_n.accelerometer) / 2 / eps,
+            (sensor_state_p.gyroscope - sensor_state_n.gyroscope) / 2 / eps,
+            (sensor_state_p.magnetometer - sensor_state_n.magnetometer) / 2 / eps,
+        ))
+
+    return h_num

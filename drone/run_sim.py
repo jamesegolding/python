@@ -12,6 +12,10 @@ import logging
 logger = logging.getLogger("run_sim")
 logger.setLevel(logging.INFO)
 
+# length and time step of simulations
+T_MAX = 10.
+DT = 0.002
+MODE = "Pitch"
 
 def run_sim(t: np.ndarray, target: np.ndarray,
             s0: np.ndarray,
@@ -21,6 +25,7 @@ def run_sim(t: np.ndarray, target: np.ndarray,
     s         = np.nan * np.ones((t.shape[0], 17))
     s_est     = np.nan * np.ones((t.shape[0], 17))
     g         = np.nan * np.ones((t.shape[0], 3))
+    g_est     = np.nan * np.ones((t.shape[0], 3))
     dn_body   = np.nan * np.ones((t.shape[0], 3))
     e         = np.nan * np.ones((t.shape[0], 3))
     e_est     = np.nan * np.ones((t.shape[0], 3))
@@ -32,11 +37,10 @@ def run_sim(t: np.ndarray, target: np.ndarray,
     # define initial conditions
     s[0, :] = s0
     s_est[0, :] = s0
-
     p = np.zeros((11, 11))
 
     # initialize filter
-    filter_state = sensor.Filter(s=s0, p=p, r_trans_sensor=0.3, r_madgwick_gain=0.02)
+    filter_state = sensor.Filter(s=s0, p=p, r_madgwick_gain=0.02,  g=0.)
 
     print("Starting simulation...")
 
@@ -60,6 +64,7 @@ def run_sim(t: np.ndarray, target: np.ndarray,
 
         filter_state = sensor.to_state(sensor_state, filter_state, u[i, :], dt)
         s_est[i, :] = filter_state.s
+        g_est[i, :] = filter_state.g
         e_est[i, :] = quaternion.to_euler(s_est[i, 3:7])
 
         if i == 1:
@@ -70,7 +75,7 @@ def run_sim(t: np.ndarray, target: np.ndarray,
     print(f"Remaining time steps: {1e3 * (time.time() - t_first) / (len(t) - 1):.2f} ms")
 
     summary = dict(
-        t=t, s=s, s_est=s_est, g=g, dn_body=dn_body, u=u, e=e, e_est=e_est,
+        t=t, s=s, s_est=s_est, g=g, g_est=g_est, dn_body=dn_body, u=u, e=e, e_est=e_est,
         g_sensor=g_sensor, n_sensor=n_sensor, en_sensor=en_sensor,
     )
 
@@ -78,11 +83,6 @@ def run_sim(t: np.ndarray, target: np.ndarray,
 
 
 if __name__ == '__main__':
-
-    # length and time step of simulations
-    T_MAX = 10.
-    DT = 0.002
-    MODE = "Roll"
 
     t = np.arange(0, T_MAX, DT)
 
