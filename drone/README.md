@@ -3,7 +3,7 @@
 Python drone model using 9dof sensor
 
 Overview:
-- Orientation sensor fusion using Madgwick Gradient Descent (https://x-io.co.uk/open-source-imu-and-ahrs-algorithms/)
+- Orientation sensor fusion using Kalman filter
 - Orientation control using quaternion target (http://folk.ntnu.no/skoge/prost/proceedings/ecc-2013/data/papers/0927.pdf)
 - Translational estimation based on simple accelerometer integration
 - Vertical control using LQR
