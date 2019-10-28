@@ -144,7 +144,7 @@ class QuaternionTest(unittest.TestCase):
                 q_n = quaternion.integrate(q, n_body - dn, dt)
                 q_der_n_num[:, i_n] = (q_p - q_n) / 2 / eps
 
-            self.assertTrue(np.isclose(q_der_q_num, q_der_q_alg, atol=1e-3).all(), f"Error in integral derivative wrt q"
+            self.assertTrue(np.isclose(q_der_q_num, q_der_q_alg, atol=5e-3).all(), f"Error in integral derivative wrt q"
                                                                                    f"\n{q_der_q_num}\n{q_der_q_alg}")
-            self.assertTrue(np.isclose(q_der_n_num, q_der_n_alg, atol=1e-3).all(), f"Error in integral derivative wrt n"
+            self.assertTrue(np.isclose(q_der_n_num, q_der_n_alg, atol=5e-3).all(), f"Error in integral derivative wrt n"
                                                                                    f"\n{q_der_n_num}\n{q_der_n_alg}")
