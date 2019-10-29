@@ -1,8 +1,9 @@
 import numpy as np
 import plotly
 
-import visuals
-import utilities as utils
+from lib import visuals
+from lib import utilities as utils
+from lib.parameters import *
 
 import logging
 logger = logging.getLogger("post_proc")
@@ -108,13 +109,15 @@ def plot_result(result):
     ]
     layout['Magnetometer'] = dict(xaxis=dict(title="Time [s]"), yaxis=dict(title="Vector North [-]"))
 
-    data['Quaternion'] = [
-        plotly.graph_objs.Scatter(x=result["t"], y=result["s"][:, 3].squeeze(), name="Q0"),
-        plotly.graph_objs.Scatter(x=result["t"], y=result["s"][:, 4].squeeze(), name="Qi"),
-        plotly.graph_objs.Scatter(x=result["t"], y=result["s"][:, 5].squeeze(), name="Qj"),
-        plotly.graph_objs.Scatter(x=result["t"], y=result["s"][:, 6].squeeze(), name="Qk"),
+    data['Acceleration World'] = [
+        plotly.graph_objs.Scatter(x=result["t"], y=result["g"][:, 0].squeeze(), name="gx"),
+        plotly.graph_objs.Scatter(x=result["t"], y=result["g"][:, 1].squeeze(), name="gy"),
+        plotly.graph_objs.Scatter(x=result["t"], y=result["g"][:, 2].squeeze() + G, name="gz"),
+        plotly.graph_objs.Scatter(x=result["t"], y=result["g_est"][:, 0].squeeze(), name="gx est", line={'dash': 'dash'}),
+        plotly.graph_objs.Scatter(x=result["t"], y=result["g_est"][:, 1].squeeze(), name="gy est", line={'dash': 'dash'}),
+        plotly.graph_objs.Scatter(x=result["t"], y=result["g_est"][:, 2].squeeze() + G, name="gz est", line={'dash': 'dash'}),
     ]
-    layout['Quaternion'] = dict(xaxis=dict(title="Time [s]"), yaxis=dict(title="Q [-]"))
+    layout['Acceleration World'] = dict(xaxis=dict(title="Time [s]"), yaxis=dict(title="Acceleration [m/s/s]"))
 
     data['Angular Acceleration'] = [
         plotly.graph_objs.Scatter(x=result["t"], y=result["dn_body"][:, 0].squeeze(), name="dnx"),

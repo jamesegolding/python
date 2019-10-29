@@ -1,7 +1,6 @@
 import numpy as np
 import numba
-import unittest
-import utilities as utils
+from lib import utilities as utils
 
 """
 Quaternion Definitions and Transformations based on:
@@ -39,6 +38,38 @@ def product(a: np.ndarray, b: np.ndarray):
 
 
 @numba.jit(nopython=True)
+def matrix(q: np.ndarray):
+    """
+    Calculate quaternion matrix from quaternion
+    :param q: quaternion
+    :return: quaternion matrix Q
+    """
+
+    return np.array([
+        [q[0], -q[1], -q[2], -q[3]],
+        [q[1],  q[0],  q[3], -q[2]],
+        [q[2], -q[3],  q[0],  q[1]],
+        [q[3],  q[2], -q[1],  q[0]],
+    ])
+
+
+@numba.jit(nopython=True)
+def conjugate_matrix(q: np.ndarray):
+    """
+    Calculate quaternion matrix from quaternion
+    :param q: quaternion
+    :return: conjugate quaternion matrix Q_hat
+    """
+
+    return np.array([
+        [q[0], -q[1], -q[2], -q[3]],
+        [q[1],  q[0], -q[3],  q[2]],
+        [q[2],  q[3],  q[0], -q[1]],
+        [q[3], -q[2],  q[1],  q[0]],
+    ])
+
+
+@numba.jit(nopython=True)
 def rate_matrix_body(q: np.ndarray):
     """
     Calculate quaternion rate matrix (body) from quaternion
@@ -54,13 +85,30 @@ def rate_matrix_body(q: np.ndarray):
 
 
 @numba.jit(nopython=True)
+def rate_matrix_world(q: np.ndarray):
+    """
+    Calculate quaternion rate matrix (world) from quaternion
+    :param q: quaternion
+    :return: quaternion rate matrix in world frame
+    """
+
+    return np.array([
+        [-q[1],  q[0], -q[3],  q[2]],
+        [-q[2],  q[3],  q[0], -q[1]],
+        [-q[3], -q[2],  q[1],  q[0]],
+    ])
+
+
+@numba.jit(nopython=True)
 def transform(v: np.ndarray, q: np.ndarray, q_conj: np.ndarray = None):
     """
     Calculate quaternion conjugate
     :param v: vector
     :param q: quaternion
+    :param q_conj: optional conjugate quaternion
     :return: vector transformed by quaternion
     """
+    q = utils.normalize(q)
 
     if q_conj is None:
         q_conj = conjugate(q)
@@ -78,7 +126,7 @@ def transform_inv(v: np.ndarray, q: np.ndarray):
     :param q: quaternion
     :return: vector inverse-transformed by quaternion
     """
-
+    q = utils.normalize(q)
     q_conj = conjugate(q)
 
     return transform(v, q_conj, q)
@@ -87,13 +135,14 @@ def transform_inv(v: np.ndarray, q: np.ndarray):
 @numba.jit(nopython=True)
 def integrate(q: np.ndarray, n_body: np.ndarray, dt: float):
     """
-    Calculate integrate single time step quaternion
+    Calculate integrate single time step unit quaternion
     :param q: quaternion
     :param n_body: rotational velocity in body frame
     :param dt: time step
     :return: quaternion at t+1
     """
 
+    q = utils.normalize(q)
     n_body_norm = utils.norm2(n_body)
 
     q_hat = np.concatenate((
@@ -104,21 +153,6 @@ def integrate(q: np.ndarray, n_body: np.ndarray, dt: float):
     q = product(q_hat, q)
 
     return q
-
-
-@numba.jit(nopython=True)
-def rate_matrix_world(q: np.ndarray):
-    """
-    Calculate quaternion rate matrix (world) from quaternion
-    :param q: quaternion
-    :return: quaternion rate matrix in world frame
-    """
-
-    return np.array([
-        [-q[1],  q[0], -q[3],  q[2]],
-        [-q[2],  q[3],  q[0], -q[1]],
-        [-q[3], -q[2],  q[1],  q[0]],
-    ])
 
 
 @numba.jit(nopython=True)
@@ -199,6 +233,7 @@ def to_rot_mat(q: np.ndarray):
     :param q: quaternion
     :return: rotation matrix
     """
+    q = utils.normalize(q)
 
     return np.array([
         [q[0]**2 + q[1]**2 - q[2]**2 - q[3]**2, 2*(q[1]*q[2] + q[0]*q[3]), 2*(q[1]*q[3] - q[0]*q[2])],
@@ -245,6 +280,36 @@ def from_rot_mat(r: np.ndarray):
         ])
     else:
         return np.nan * np.ones(4)
+
+
+
+@numba.jit(nopython=True)
+def to_axis_angle(q: np.ndarray):
+    """
+    Calculate axis rotation by angle from quaternion
+    :param q: quaternion
+    :return: axis
+    :return: angle
+    """
+
+    q = utils.normalize(q)
+    theta = 2 * np.arccos(q[0])
+    axis = utils.normalize(q[1:])
+
+    return axis, theta
+
+
+@numba.jit(nopython=True)
+def from_axis_angle(axis: np.ndarray, theta: float):
+    """
+    Calculate quaternion from rotation by angle about axis
+    :param axis: axis
+    :param theta: angle
+    :return: quaternion
+    """
+
+    return utils.normalize(np.concatenate((np.array([np.cos(theta / 2.)]),
+                                           np.sin(theta / 2.) * axis)))
 
 
 @numba.jit(nopython=True)
@@ -298,3 +363,78 @@ def euler_fix_quadrant(e: np.ndarray):
 
     return e_fix
 
+
+@numba.jit(nopython=True)
+def integrate_der(q: np.ndarray, n_body: np.ndarray, dt: float):
+    """
+    Return the derivative of the integrated quaternion q as a function of previous time step q
+    and rotational velocity
+    :param q: quaternion
+    :param n_body: rotational velocity vector
+    :param dt: time step
+    :return: q_der_q and q_der_n
+    """
+
+    q = utils.normalize(q)
+    n_body_norm = utils.norm2(n_body)
+    w_world = rate_matrix_world(q)
+
+    q_hat = np.concatenate((
+        np.array([np.cos(0.5 * n_body_norm * dt)]),
+        np.sin(0.5 * n_body_norm * dt) * utils.normalize(n_body),
+    ))
+    q_hat_mat = matrix(q_hat)
+
+    # derivative of q with respect to previous time step q
+    q_der_q = q_hat_mat @ (np.eye(4) - q.reshape(-1,1) @ q.reshape(1,-1))
+
+    # derivative of q with respect to rotational velocity
+    q_der_n = dt * 0.5 * w_world.T
+
+    return q_der_q, q_der_n
+
+
+@numba.jit(nopython=True)
+def rot_mat_der(q: np.ndarray, i_q: int = 0, b_inverse: bool = False):
+    """
+    Return the derivative of a rotation matrix wrt given element
+    :param q: quaternion
+    :param i_q: derivative with respect to element i_q
+    :param b_inverse: boolean true to return derivative of inverse rotation matrix
+    :return: r_der_qi derivative of rotation matrix wrt i_q
+    """
+
+    q = utils.normalize(q)
+    u_dv_dt = -2 * q[i_q] * to_rot_mat(q)
+
+    if i_q == 0:
+        v_du_dt = 2 * np.array([
+            [q[0],  q[3], -q[2]],
+            [-q[3], q[0],  q[1]],
+            [q[2], -q[1],  q[0]],
+        ])
+    elif i_q == 1:
+        v_du_dt = 2 * np.array([
+            [q[1],  q[2],  q[3]],
+            [q[2], -q[1],  q[0]],
+            [q[3], -q[0], -q[1]],
+        ])
+    elif i_q == 2:
+        v_du_dt = 2 * np.array([
+            [-q[2], q[1], -q[0]],
+            [q[1],  q[2],  q[3]],
+            [q[0],  q[3], -q[2]],
+        ])
+    elif i_q == 3:
+        v_du_dt = 2 * np.array([
+            [-q[3],  q[0], q[1]],
+            [-q[0], -q[3], q[2]],
+            [q[1],   q[2], q[3]],
+        ])
+    else:
+        return np.nan * np.ones((3, 3))
+
+    if b_inverse:
+        return np.ascontiguousarray(np.add(u_dv_dt, v_du_dt).T)
+    else:
+        return np.add(u_dv_dt, v_du_dt)

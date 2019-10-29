@@ -1,7 +1,8 @@
 
 import unittest
 import numpy as np
-import utilities as utils
+from lib import utilities as utils
+
 
 class UtilitiesTest(unittest.TestCase):
 

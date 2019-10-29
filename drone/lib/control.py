@@ -2,10 +2,10 @@ import scipy.linalg
 import numpy as np
 import numba
 
-import drone
-import utilities as utils
-import quaternion
-from parameters import *
+from lib import drone
+from lib import quaternion
+from lib import utilities as utils
+from lib.parameters import *
 
 import logging
 logger = logging.getLogger("control")
@@ -15,7 +15,7 @@ logger.setLevel(logging.INFO)
 # attitude control parameters
 K_P = 0.1
 K_V = 0.3
-K_Q = 0.1
+K_Q = 0.2
 K_W = 0.05
 THETA_MAX = np.pi / 8.
 
@@ -36,6 +36,7 @@ A, B, Q, R, U_0 = drone.vertical_state_space()
 K_Z = lqr_gain(A, B, Q, R)
 
 
+#@numba.jit(nopython=True)
 def update(s: np.ndarray,
            tgt: np.ndarray,
            ):
@@ -49,6 +50,8 @@ def update(s: np.ndarray,
         u = U_0 + u_vertical + u_attitude
         if max(u) > f_motor_max:
             u = u - (max(u) - f_motor_max)
+
+    u = utils.clip(u, a_min=0., a_max=f_motor_max)
 
     return u
 
@@ -69,6 +72,7 @@ def vertical(s: np.ndarray,
     return u
 
 
+@numba.jit(nopython=True)
 def attitude(s: np.ndarray,
              tgt_xy_psi: np.ndarray,
              ):
@@ -81,8 +85,7 @@ def attitude(s: np.ndarray,
     e_p = tgt_xy_psi[np.array([0, 1])] - s[np.array([0, 1])]
     e_v = np.array([0, 0]) - s[np.array([7, 8])]
 
-    q_r = np.array([1., 0., 0., 0.])
-    #q_r = planar_ctrl_law(e_p, e_v)
+    q_r = planar_ctrl_law(e_p, e_v)
 
     # overall target quaternion
     e_q = quaternion.product(q_r, quaternion.conjugate(q))[1:]
@@ -93,28 +96,37 @@ def attitude(s: np.ndarray,
     return u
 
 
-def planar_ctrl_law(e_p, e_v):
+@numba.jit(nopython=True)
+def planar_ctrl_law(e_p_2d, e_v_2d):
 
+    e_p = np.array([e_p_2d[0], e_p_2d[1], 0.])
+    e_v = np.array([e_v_2d[0], e_v_2d[1], 0.])
     norm_e_p = utils.norm2(e_p)
     norm_e_v = utils.norm2(e_v)
 
     if norm_e_p > utils.EPS:
         # calculate axis to rotate about
-        axis_p = utils.cross(e_p / norm_e_p, np.array([0., 0., 1.]))
+        axis_p = utils.cross(np.array([0., 0., 1.]), e_p / norm_e_p)
         # calculate angle target
-        theta_p = utils.clip(K_P * norm_e_p, a_min=-THETA_MAX, a_max=THETA_MAX)
-        q_xy = np.concatenate((np.array([np.cos(theta_p / 2.)]),
-                               np.sin(theta_p / 2.) * axis_p))
+        theta_p = utils.smooth_symmetric_clip(K_P * norm_e_p, a_clip=THETA_MAX)
+        q_p = quaternion.from_axis_angle(axis_p, theta_p)
 
-        # damping terms
-        if norm_e_v > utils.EPS:
-            # calculate axis to rotate about
-            axis_v = utils.cross(e_v / norm_e_v, np.array([0., 0., 1.]))
-            # calculate angle target
-            theta_v = utils.clip(K_V * norm_e_v, a_min=-THETA_MAX, a_max=THETA_MAX)
-            q_v = np.concatenate((np.array([np.cos(theta_v / 2.)]),
-                                  np.sin(theta_v / 2.) * axis_v))
-            q_xy = utils.normalize(quaternion.product(q_xy, q_v))
+        if (norm_e_p < utils.EPS) and norm_e_v > utils.EPS:
+            # damping terms
+            axis_v = utils.cross(np.array([0., 0., 1.]), e_v / norm_e_v)
+            theta_v = utils.smooth_symmetric_clip(K_V * norm_e_v, a_clip=THETA_MAX)
+            q_v = quaternion.from_axis_angle(axis_v, theta_v)
+        else:
+            q_v = np.array([1., 0., 0., 0.])
+
+        # get resultant quaternion
+        q_xy = quaternion.product(q_p, q_v)
+        axis_tot, theta_tot = quaternion.to_axis_angle(q_xy)
+
+        # saturate angle to limit
+        theta_clip = utils.smooth_symmetric_clip(theta_tot, a_clip=THETA_MAX)
+        q_xy = quaternion.from_axis_angle(axis_tot, theta_clip)
+
     else:
         q_xy = np.array([1., 0., 0., 0.])
 
