@@ -75,7 +75,6 @@ def to_state(sensor_state: Sensor,
     # update filter (can't _replace in numba)
     filter_state = Filter(s=s_filter,
                           p=p,
-                          r_trans_sensor=filter_state.r_trans_sensor,
                           r_madgwick_gain=filter_state.r_madgwick_gain,
                           g=g,
                           )
