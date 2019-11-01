@@ -19,6 +19,7 @@ class MyClass {
 
         int p;
         int q;
+        float* array;
 
         // default constructor
         MyClass() {
@@ -35,7 +36,9 @@ class MyClass {
         }
 
         // destructor
-        ~MyClass() { std::cout << "MyClass destructor" << std::endl; }
+        ~MyClass() {
+            std::cout << "MyClass destructor" << std::endl;
+        }
 
         int get_p() { return p; }
         int get_q() { return q; }
@@ -44,6 +47,15 @@ class MyClass {
             else if ((p == -1) || (q == -1)) { return -1; }
             else { return p * q + p % q; }
         }
+
+        void set_array(float a, float b, float c) {
+            array = new float[3];
+            array[0] = a;
+            array[1] = b;
+            array[2] = c;
+        }
+        float* get_array() { return array; }
+
 
 };
 
@@ -54,4 +66,6 @@ extern "C" {
     int GetQ(MyClass* myClass){ return myClass->get_q(); }
     int Calc(MyClass* myClass){ return myClass->calc(); }
     void Delete(MyClass* myClass){ delete myClass; }
+    void SetArray(MyClass* myClass, float a, float b, float c){ myClass->set_array(a, b, c); }
+    float* GetArray(MyClass* myClass){ return myClass->get_array(); }
 }
